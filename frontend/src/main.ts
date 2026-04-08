@@ -9,11 +9,13 @@ import 'splitpanes/dist/splitpanes.css'
 import 'highlight.js/styles/atom-one-dark.css'
 
 async function bootstrap() {
-  // Initialize API client with network detection
-  await initApiClient()
-
-  // Start periodic LAN detection (every 5 minutes)
-  startLanDetection(5 * 60 * 1000)
+  try {
+    await initApiClient()
+    startLanDetection(5 * 60 * 1000)
+  } catch (error) {
+    console.error('[Bootstrap] Initialization failed:', error)
+    // Continue with app mount even if init fails
+  }
 
   const app = createApp(App)
   app.use(createPinia())
@@ -22,4 +24,6 @@ async function bootstrap() {
   app.mount('#app')
 }
 
-bootstrap()
+bootstrap().catch(error => {
+  console.error('[Bootstrap] Fatal error:', error)
+})
