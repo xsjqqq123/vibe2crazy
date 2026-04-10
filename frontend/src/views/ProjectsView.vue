@@ -338,7 +338,7 @@ onMounted(async () => {
               v-model="newProject.git_path"
               placeholder="/path/to/repo"
             />
-            <p class="text-xs text-gray-500 mt-1">Path to git repository (auto-detects branch on blur, initializes if needed)</p>
+            <p class="text-xs text-gray-500 mt-1">Path to git repository - branch will be auto-detected when path is entered</p>
           </div>
 
           <div>
