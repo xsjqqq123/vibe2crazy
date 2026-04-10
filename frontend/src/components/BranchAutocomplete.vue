@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from 'vue'
+import { ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { getBranches } from '@/api/git'
 
@@ -152,10 +152,6 @@ onClickOutside(wrapperRef, () => {
   showDropdown.value = false
   highlightedIndex.value = -1
 })
-
-onBeforeUnmount(() => {
-  // Cleanup is handled by onClickOutside
-})
 </script>
 
 <template>
@@ -166,6 +162,10 @@ onBeforeUnmount(() => {
       type="text"
       :placeholder="placeholder"
       :disabled="disabled"
+      role="combobox"
+      :aria-expanded="showDropdown"
+      aria-haspopup="listbox"
+      aria-controls="branch-listbox"
       @keydown="handleKeydown"
       @blur="handleBlur"
       class="flex-1 px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-l-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-dark-800 dark:text-gray-100 dark:placeholder-gray-500 disabled:bg-gray-100 dark:disabled:bg-dark-900 disabled:cursor-not-allowed"
@@ -219,12 +219,16 @@ onBeforeUnmount(() => {
     <div
       v-if="showDropdown && branches.length > 0"
       ref="dropdownRef"
-      class="absolute z-10 w-full mt-10 bg-white dark:bg-dark-800 border border-gray-300 dark:border-dark-700 rounded-md shadow-lg max-h-60 overflow-auto"
+      role="listbox"
+      id="branch-listbox"
+      class="absolute z-10 w-full top-full bg-white dark:bg-dark-800 border border-gray-300 dark:border-dark-700 rounded-md shadow-lg max-h-60 overflow-auto"
     >
       <ul class="py-1">
         <li
           v-for="(branch, index) in branches"
-          :key="index"
+          :key="branch"
+          role="option"
+          :aria-selected="branch === query"
           @click="selectBranch(branch)"
           @mousedown.prevent
           class="px-3 py-2 cursor-pointer transition-colors"
