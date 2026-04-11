@@ -1,7 +1,6 @@
 """
 Tests for changed files pagination endpoint.
 """
-import os
 import subprocess
 from pathlib import Path
 from fastapi.testclient import TestClient
