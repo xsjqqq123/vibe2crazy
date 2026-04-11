@@ -1,0 +1,2595 @@
+<script setup lang="ts">
+import { ref, onMounted, computed, onUnmounted, watch, nextTick, provide } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useTheme } from '@/composables/useTheme'
+import { useConfirm } from '@/composables/useConfirm'
+import { useMainStore } from '@/store'
+import filesApi from '@/api/files'
+import tasksApi from '@/api/tasks'
+import { gitApi, type CommitInfo, type CommitDiff, type PaginatedCommitsResponse } from '@/api/git'
+import { type ChangedFileInfo, type PaginatedChangedFilesResponse } from '@/api/files'
+import FileCacheService from '@/services/FileCacheService'
+import { Splitpanes, Pane } from 'splitpanes'
+import { useFileTree, provideFileTree } from '@/composables/useFileTree'
+import FileTreeItem from '@/components/FileTreeItem.vue'
+import ContextMenu from '@/components/ContextMenu.vue'
+import MarkdownPreviewModal from '@/components/MarkdownPreviewModal.vue'
+import FileQuickJumpModal from '@/components/FileQuickJumpModal.vue'
+import type { MenuItem } from '@/components/ContextMenu.vue'
+import SymbolOutline from '@/components/Monaco/SymbolOutline.vue'
+import ConflictEditor from '@/components/Monaco/ConflictEditor.vue'
+import TaskSettingsModal from '@/components/TaskSettingsModal.vue'
+import { useSymbolOutline, type SymbolInfo } from '@/composables/useSymbolOutline'
+import { detectLanguage, supportsSymbolExtraction } from '@/utils/languageDetection'
+import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
+
+interface ButtonStates {
+  can_accept: boolean
+  can_merge: boolean
+}
+
+interface Layout {
+  sidebar: number
+  changedFiles: number
+  files: number
+  commits: number
+  terminal: number
+}
+
+const router = useRouter()
+const route = useRoute()
+const { theme, cycleTheme } = useTheme()
+const { showConfirm } = useConfirm()
+const store = useMainStore()
+
+const taskId = computed(() => route.params.id as string)
+const task = computed(() => store.currentTask)
+
+// Changed files
+const changedFiles = ref<ChangedFileInfo[]>([])
+// Changed files pagination
+const changedFilesPage = ref(1)
+const changedFilesData = ref<PaginatedChangedFilesResponse | null>(null)
+const initialLoading = ref(true)
+
+// Commits
+const commits = ref<CommitInfo[]>([])
+const loadingCommits = ref(false)
+const commitsError = ref('')
+const lastCommitsHash = ref<string>('')
+const newCommitHashes = ref<Set<string>>(new Set())
+
+// Pagination
+const currentPage = ref(1)
+const commitsData = ref<PaginatedCommitsResponse | null>(null)
+
+// Context menu
+const contextMenu = ref({
+  show: false,
+  x: 0,
+  y: 0,
+  path: '',
+  type: '',
+  source: 'files' as 'files' | 'changedFiles' | 'commits',  // Track which list the menu is from
+  commit: null as CommitInfo | null
+})
+
+// Commit diff view
+const selectedCommit = ref<CommitDiff | null>(null)
+const expandedFilesInCommit = ref<Set<string>>(new Set())
+const loadingCommitDiff = ref(false)
+const commitDiffError = ref('')
+
+// Check if current file is a markdown file
+const isMarkdownFile = computed(() => {
+  return currentFile.value?.toLowerCase().endsWith('.md') || false
+})
+const currentFile = ref<string | null>(null)
+const fileContent = ref('')
+const originalContent = ref('')
+const loadingContent = ref(false)
+const savingContent = ref(false)
+const saveError = ref('')
+const editorMode = ref<'editor' | 'diff' | 'commit-diff' | 'deleted' | 'conflict'>('editor')
+const isFileDeleted = ref(false)
+
+// Mobile state
+const showFileList = ref(false)
+const isMobile = ref(window.innerWidth < 768)
+
+// Terminal
+const showTerminal = ref(!isMobile.value)
+
+// Merge
+const mergeError = ref('')
+const mergeSuccess = ref(false)
+const mergeExecutionLog = ref<any[] | null>(null)  // Store execution log for errors
+
+// Accept
+const accepting = ref(false)
+const acceptError = ref('')
+const acceptSuccess = ref(false)
+const buttonStates = ref<ButtonStates>({
+  can_accept: false,
+  can_merge: false
+})
+
+// Sync state
+const syncing = ref(false)          // Sync in progress
+const syncStep = ref('')            // Current sync step message
+const hasConflicts = ref(false)     // Conflicts detected from sync
+const conflictedFiles = ref<string[]>([])  // List of conflicted files
+const syncNeedsResolution = ref(false)  // Backend returned needs_resolution=true
+
+// PDF prompt state
+const pdfPromptFile = ref<string | null>(null)
+const openingPdf = ref(false)
+const pdfError = ref<string | null>(null)
+const pdfDownloadProgress = ref<{ loaded: number; total: number } | null>(null)
+
+// Image preview state
+const imagePreviewFile = ref<string | null>(null)
+const imagePreviewUrl = ref<string | null>(null)
+const loadingImage = ref(false)
+const imageError = ref<string | null>(null)
+
+// Symbol outline
+const { symbols, extractSymbols } = useSymbolOutline()
+const outlineCollapsed = ref(localStorage.getItem('v2c-outline-collapsed') === 'true')
+const previewCollapsed = ref(localStorage.getItem('v2c-preview-collapsed') === 'true')
+const editorRef = ref<InstanceType<typeof MonacoEditor> | null>(null)
+const outlineRef = ref<InstanceType<typeof SymbolOutline> | null>(null)
+
+// Settings modal
+const showSettingsModal = ref(false)
+
+// Commit message modal
+const showCommitMessageModal = ref(false)
+const commitMessage = ref('')
+
+// File type support check for symbol outline (only languages with extraction patterns)
+const isSupportedFileType = computed(() => {
+  if (!currentFile.value) return false
+  const language = detectLanguage(currentFile.value)
+  return supportsSymbolExtraction(language)
+})
+
+// Simple debounce utility (no VueUse dependency needed)
+function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  return ((...args: Parameters<T>) => {
+    if (timeoutId) clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => fn(...args), delay)
+  }) as T
+}
+
+// Debounced symbol extraction (300ms)
+const debouncedExtractSymbols = debounce((content: string, path: string) => {
+  if (outlineCollapsed.value) return // Lazy extraction - only when expanded
+  extractSymbols(content, detectLanguage(path))
+}, 300)
+
+// Image file extensions
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']
+
+function isImageFile(filePath: string): boolean {
+  const lower = filePath.toLowerCase()
+  return IMAGE_EXTENSIONS.some(ext => lower.endsWith(ext))
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+async function openPdfInBrowser() {
+  if (!pdfPromptFile.value) return
+  openingPdf.value = true
+  pdfError.value = null
+  pdfDownloadProgress.value = null
+  try {
+    const blob = await filesApi.getRawFile(taskId.value, pdfPromptFile.value, (progress) => {
+      pdfDownloadProgress.value = progress
+    })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    // Revoke URL after delay to allow browser to load it
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (err) {
+    pdfError.value = 'Failed to open PDF. Please try again.'
+    console.error('Failed to open PDF:', err)
+  } finally {
+    openingPdf.value = false
+    pdfDownloadProgress.value = null
+  }
+}
+
+function closePdfPrompt() {
+  pdfPromptFile.value = null
+  pdfError.value = null
+  pdfDownloadProgress.value = null
+}
+
+// Load and display image in the editor area
+async function loadImagePreview(filePath: string) {
+  imagePreviewFile.value = filePath
+  loadingImage.value = true
+  imageError.value = null
+
+  // Clean up previous image URL
+  if (imagePreviewUrl.value) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+    imagePreviewUrl.value = null
+  }
+
+  try {
+    const blob = await filesApi.getRawFile(taskId.value, filePath)
+    imagePreviewUrl.value = URL.createObjectURL(blob)
+  } catch (err) {
+    imageError.value = 'Failed to load image. Please try again.'
+    console.error('Failed to load image:', err)
+  } finally {
+    loadingImage.value = false
+  }
+}
+
+function closeImagePreview() {
+  if (imagePreviewUrl.value) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+    imagePreviewUrl.value = null
+  }
+  imagePreviewFile.value = null
+  imageError.value = null
+}
+
+// Markdown preview state
+const showMarkdownPreview = ref(false)
+const markdownPreviewPath = ref('')
+const markdownPreviewContent = ref('')
+
+// File quick jump state
+const showFileQuickJump = ref(false)
+
+// Resizable panels state
+const layout = ref<Layout>({
+  sidebar: 25,
+  changedFiles: 60,
+  files: 15,
+  commits: 25,
+  terminal: 50
+})
+
+// Splitpanes refs for programmatic control
+const mainSplitpanesRef = ref<any>(null)
+const sidebarSplitpanesRef = ref<any>(null)
+const editorSplitpanesRef = ref<any>(null)
+
+// Flag to prevent saving while loading
+const isLoadingLayout = ref(false)
+
+// Flag to track when layout is loaded (used to delay rendering)
+const layoutLoaded = ref(false)
+
+const STORAGE_KEY = computed(() => `vibe2crazy-layout-${taskId.value}`)
+let saveTimeout: number | null = null
+
+// File tree with lazy loading
+const {
+  nodes,
+  rootPaths,
+  loading: loadingFiles,
+  loadingPaths,
+  expandedDirs,
+  loadRoot,
+  expandDir,
+  collapseDir,
+  getNode
+} = useFileTree(taskId)
+
+// Provide file tree to child components
+provideFileTree({ nodes, expandedDirs, loadingPaths } as any)
+
+const saveLayout = () => {
+  // Don't save if we're currently loading a saved layout
+  if (isLoadingLayout.value) {
+    console.log('[Layout Debug] Skipping save during layout loading')
+    return
+  }
+
+  console.log('[Layout Debug] saveLayout called', {
+    storageKey: STORAGE_KEY.value,
+    layout: layout.value
+  })
+  if (saveTimeout) clearTimeout(saveTimeout)
+  saveTimeout = window.setTimeout(() => {
+    const layoutJson = JSON.stringify(layout.value)
+    console.log('[Layout Debug] Saving to localStorage', {
+      key: STORAGE_KEY.value,
+      value: layoutJson
+    })
+    localStorage.setItem(STORAGE_KEY.value, layoutJson)
+    // Verify it was saved
+    const saved = localStorage.getItem(STORAGE_KEY.value)
+    console.log('[Layout Debug] Verified saved value', saved)
+  }, 100)
+}
+
+const loadLayout = () => {
+  console.log('[Layout Debug] loadLayout called', {
+    storageKey: STORAGE_KEY.value,
+    taskId: taskId.value
+  })
+
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY.value)
+    console.log('[Layout Debug] Raw value from localStorage', saved)
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        console.log('[Layout Debug] Parsed layout', parsed)
+
+        // Check if we need to reset layout due to panel swap
+        // If changedFiles < files, it's likely old layout (pre-swap)
+        const needsReset = parsed.changedFiles < parsed.files
+
+        // Validate parsed layout has all required fields
+        if (typeof parsed.sidebar === 'number' &&
+            typeof parsed.changedFiles === 'number' &&
+            typeof parsed.files === 'number' &&
+            typeof parsed.commits === 'number' &&
+            typeof parsed.terminal === 'number') {
+
+          if (needsReset) {
+            console.log('[Layout Debug] Resetting layout due to panel reordering')
+            // Clear old layout and use defaults
+            try {
+              localStorage.removeItem(STORAGE_KEY.value)
+            } catch (e) {
+              console.warn('[Layout Debug] Failed to remove item from localStorage', e)
+            }
+          } else {
+            console.log('[Layout Debug] Applying parsed layout to layout.value')
+
+            // Set flag to prevent saving while loading
+            isLoadingLayout.value = true
+
+            // Update the reactive layout value
+            layout.value = parsed
+            console.log('[Layout Debug] Layout after applying', layout.value)
+
+            // Programmatically set splitpanes sizes to match loaded layout
+            // Wait for next tick to ensure components are mounted
+            nextTick(() => {
+              // The splitpanes ref exposes internal panes array
+              const mainPanes = (mainSplitpanesRef.value as any)?.panes
+              const sidebarPanes = (sidebarSplitpanesRef.value as any)?.panes
+              const editorPanes = (editorSplitpanesRef.value as any)?.panes
+
+              console.log('[Layout Debug] Splitpanes refs', {
+                main: mainSplitpanesRef.value,
+                sidebar: sidebarSplitpanesRef.value,
+                editor: editorSplitpanesRef.value,
+                mainPanes,
+                sidebarPanes,
+                editorPanes
+              })
+
+              if (mainPanes && mainPanes.length >= 2) {
+                console.log('[Layout Debug] Setting main splitpanes sizes', [parsed.sidebar, 100 - parsed.sidebar])
+                mainPanes[0].size = parsed.sidebar
+                mainPanes[1].size = 100 - parsed.sidebar
+              }
+              if (sidebarPanes && sidebarPanes.length >= 3) {
+                console.log('[Layout Debug] Setting sidebar splitpanes sizes', [parsed.changedFiles, parsed.files, parsed.commits])
+                sidebarPanes[0].size = parsed.changedFiles
+                sidebarPanes[1].size = parsed.files
+                sidebarPanes[2].size = parsed.commits
+              }
+              if (editorPanes && editorPanes.length >= 2 && showTerminal.value) {
+                console.log('[Layout Debug] Setting editor splitpanes sizes', [100 - parsed.terminal, parsed.terminal])
+                editorPanes[0].size = 100 - parsed.terminal
+                editorPanes[1].size = parsed.terminal
+              }
+
+              // Clear flag after a delay to allow splitpanes to process changes
+              setTimeout(() => {
+                isLoadingLayout.value = false
+                layoutLoaded.value = true
+                console.log('[Layout Debug] Layout loading complete')
+              }, 200)
+            })
+          }
+        } else {
+          console.warn('[Layout Debug] Parsed layout missing required fields', parsed)
+        }
+      } catch (e) {
+        console.error('[Layout Debug] Failed to parse layout from localStorage', e)
+      }
+    } else {
+      console.log('[Layout Debug] No saved layout found in localStorage')
+    }
+  } catch (e) {
+    // Catch any localStorage access errors (e.g., privacy mode, cross-origin restrictions)
+    console.error('[Layout Debug] Failed to access localStorage, using defaults', e)
+  }
+
+  // Always mark layout as loaded, even if using defaults or localStorage failed
+  // This ensures the UI renders even if localStorage is inaccessible
+  layoutLoaded.value = true
+}
+
+// Navigate back to tasks list with full page reload
+const goBackToTasks = () => {
+  if (store.currentProject?.id) {
+    window.location.href = `/projects/${store.currentProject.id}`
+  }
+}
+
+// Check if device is mobile
+const checkMobile = () => {
+  isMobile.value = window.innerWidth < 768
+}
+
+type LayoutEvent = any[]
+
+const handleSidebarResize = (event: LayoutEvent) => {
+  console.log('[Layout Debug] handleSidebarResize called', event)
+  // event.panes is the array of pane objects
+  const panes = (event as any).panes
+  if (panes && panes.length >= 3) {
+    layout.value.changedFiles = Math.round(panes[0].size)
+    layout.value.files = Math.round(panes[1].size)
+    layout.value.commits = Math.round(panes[2].size)
+    console.log('[Layout Debug] Updated layout', layout.value)
+  }
+}
+
+const handleEditorResize = (event: LayoutEvent) => {
+  console.log('[Layout Debug] handleEditorResize called', { event, showTerminal: showTerminal.value })
+  const panes = (event as any).panes
+  if (showTerminal.value && panes && panes.length >= 2) {
+    layout.value.terminal = Math.round(panes[1].size)
+    console.log('[Layout Debug] Updated terminal size', layout.value.terminal)
+  }
+}
+
+const handleMainResize = (event: LayoutEvent) => {
+  console.log('[Layout Debug] handleMainResize called', event)
+  const panes = (event as any).panes
+  if (panes && panes.length >= 2) {
+    layout.value.sidebar = Math.round(panes[0].size)
+    console.log('[Layout Debug] Updated sidebar size', layout.value.sidebar)
+  }
+}
+
+// Diff editor ref
+const diffEditorRef = ref<any>(null)
+
+// Conflict editor ref
+const conflictEditorRef = ref<any>(null)
+
+// Merge dialog state
+const showMergeDialog = ref(false)
+const mergeMessage = ref('')
+const mergeInputRef = ref<HTMLInputElement>()
+
+// Auto-focus input when dialog opens
+watch(showMergeDialog, (isOpen) => {
+  if (isOpen && mergeInputRef.value) {
+    nextTick(() => {
+      mergeInputRef.value?.focus()
+      mergeInputRef.value?.select()
+    })
+  }
+})
+
+watch(showTerminal, (isShown) => {
+  if (isShown && layout.value.terminal === 0) {
+    layout.value.terminal = 50
+  }
+})
+
+// Update terminal visibility when viewport changes between mobile/desktop
+watch(isMobile, (newIsMobile) => {
+  showTerminal.value = !newIsMobile
+})
+
+watch(layout, (newLayout, oldLayout) => {
+  console.log('[Layout Debug] layout watcher triggered', {
+    old: oldLayout,
+    new: newLayout
+  })
+  saveLayout()
+}, { deep: true })
+
+// Reset to page 1 when task changes
+watch(taskId, () => {
+  currentPage.value = 1
+  changedFilesPage.value = 1
+  loadCommits()
+})
+
+// Also watch individual layout properties to see which ones change
+watch(() => layout.value.sidebar, (newVal, oldVal) => {
+  console.log('[Layout Debug] sidebar changed', { old: oldVal, new: newVal })
+})
+watch(() => layout.value.changedFiles, (newVal, oldVal) => {
+  console.log('[Layout Debug] changedFiles changed', { old: oldVal, new: newVal })
+})
+watch(() => layout.value.files, (newVal, oldVal) => {
+  console.log('[Layout Debug] files changed', { old: oldVal, new: newVal })
+})
+watch(() => layout.value.commits, (newVal, oldVal) => {
+  console.log('[Layout Debug] commits changed', { old: oldVal, new: newVal })
+})
+watch(() => layout.value.terminal, (newVal, oldVal) => {
+  console.log('[Layout Debug] terminal changed', { old: oldVal, new: newVal })
+})
+
+// Update markdown preview content in real-time
+watch(fileContent, (newContent) => {
+  if (showMarkdownPreview.value && currentFile.value?.toLowerCase().endsWith('.md')) {
+    markdownPreviewContent.value = newContent
+  }
+})
+
+const goToNextDiff = () => {
+  if (diffEditorRef.value) {
+    diffEditorRef.value.goToNextDiff()
+  }
+}
+
+const goToPrevDiff = () => {
+  if (diffEditorRef.value) {
+    diffEditorRef.value.goToPrevDiff()
+  }
+}
+
+// Mobile view toggle methods
+const toggleFileList = () => {
+  if (isMobile.value) {
+    showFileList.value = !showFileList.value
+    if (showFileList.value) {
+      showTerminal.value = false
+    }
+  }
+}
+
+const toggleTerminal = () => {
+  if (isMobile.value) {
+    // Close file list first if it's open
+    if (showFileList.value) {
+      showFileList.value = false
+    }
+    showTerminal.value = !showTerminal.value
+  } else {
+    // Desktop: just toggle terminal
+    showTerminal.value = !showTerminal.value
+  }
+}
+
+const loadFileTree = async () => {
+  if (!taskId.value) return
+
+  try {
+    await loadRoot()
+    console.log('[CodeReviewView] loadFileTree: rootPaths =', rootPaths.value, 'nodes size =', nodes.value.size)
+  } catch (err: any) {
+    console.error('Failed to load file tree:', err)
+  }
+}
+
+const loadTask = async () => {
+  try {
+    const taskData = await tasksApi.get(taskId.value)
+    store.setCurrentTask(taskData)
+    // Set current project for navigation back to tasks
+    store.setCurrentProject({ id: taskData.project_id })
+  } catch (err: any) {
+    console.error('Failed to load task:', err)
+    // Redirect to projects if task doesn't exist
+    router.push('/projects')
+  }
+}
+
+const loadChangedFiles = async (page: number = 1) => {
+  // Guard against navigation/unmounting - don't make API calls if taskId is undefined
+  if (!taskId.value) return
+
+  // Don't show loading spinner during auto-refresh to prevent jitter
+  // initialLoading handles the first load only
+  try {
+    changedFilesData.value = await filesApi.getChangedFiles(taskId.value, page, 20)
+    changedFiles.value = changedFilesData.value.files
+    changedFilesPage.value = page
+  } catch (err: any) {
+    console.error('Failed to load changed files:', err)
+  }
+}
+
+const handleChangedFilesPageChange = (page: number) => {
+  loadChangedFiles(page)
+  // Scroll to top of changed files list
+  const changedFilesPane = document.querySelector('.changed-files-list')
+  if (changedFilesPane) {
+    changedFilesPane.scrollTop = 0
+  }
+}
+
+const loadFile = async (filePath: string | null, mode: 'editor' | 'diff' = 'editor') => {
+  console.log('[CodeReviewView] loadFile called, filePath:', filePath, 'mode:', mode)
+  if (!filePath) {
+    // Just closing sidebar on mobile
+    if (isMobile.value) {
+      showFileList.value = false
+      showTerminal.value = false
+    }
+    return
+  }
+
+  console.log('[CodeReviewView] loadFile: proceeding to load file', filePath)
+
+  // CHECK FOR PDF: If file is PDF, show prompt to open in browser
+  if (filePath.endsWith('.pdf')) {
+    pdfPromptFile.value = filePath
+    pdfError.value = null
+    closeImagePreview() // Close any image preview
+
+    // Close sidebar on mobile
+    if (isMobile.value) {
+      showFileList.value = false
+      showTerminal.value = false
+    }
+    return
+  }
+
+  // CHECK FOR IMAGE: If file is an image, show preview in editor area
+  if (isImageFile(filePath)) {
+    closePdfPrompt() // Close any PDF prompt
+    loadImagePreview(filePath)
+
+    // Close sidebar on mobile
+    if (isMobile.value) {
+      showFileList.value = false
+      showTerminal.value = false
+    }
+    return
+  }
+
+  // Reset PDF prompt and image preview state when loading other files
+  pdfPromptFile.value = null
+  closeImagePreview()
+
+  currentFile.value = filePath
+  editorMode.value = mode
+  loadingContent.value = true
+  saveError.value = ''
+  isFileDeleted.value = false  // RESET: Clear any previous deleted state
+
+  // Close sidebar and show editor on mobile
+  if (isMobile.value) {
+    showFileList.value = false
+    showTerminal.value = false
+  }
+
+  // CHECK IF DELETED: Check if file is deleted
+  const fileStatus = changedFiles.value.find(f => f.path === filePath)?.status
+  if (fileStatus === 'D') {
+    isFileDeleted.value = true
+    editorMode.value = 'deleted'
+
+    // Load original content from git (no caching for deleted files)
+    try {
+      const originalResult = await filesApi.getOriginal(taskId.value, filePath)
+      fileContent.value = originalResult.content
+      originalContent.value = originalResult.content
+    } catch (err: any) {
+      saveError.value = 'This file was deleted and has no history to display'
+    }
+    loadingContent.value = false
+    return
+  }
+
+  // CHECK IF CONFLICT: Check if file has merge conflict
+  if (fileStatus === 'U') {
+    editorMode.value = 'conflict'
+
+    // Load current file content (with conflict markers)
+    try {
+      const result = await filesApi.read(taskId.value, filePath)
+      fileContent.value = result.content
+      // Load original content from git for the base version
+      try {
+        const originalResult = await filesApi.getOriginal(taskId.value, filePath)
+        originalContent.value = originalResult.content
+      } catch (origErr: any) {
+        originalContent.value = ''
+      }
+    } catch (err: any) {
+      saveError.value = err.message || 'Failed to load file with conflicts'
+    }
+    loadingContent.value = false
+    return
+  }
+
+  // === CACHE LOGIC START ===
+  try {
+    // Step 1: Get hash from server
+    const hashResult = await filesApi.getHash(taskId.value, filePath)
+    const serverHash = hashResult.hash
+
+    // Step 2: Check local cache
+    const cached = FileCacheService.get(taskId.value, filePath)
+
+    if (cached && cached.hash === serverHash) {
+      // Cache hit - use cached content
+      fileContent.value = cached.content
+
+      // If diff mode, still need to load original content from git
+      if (mode === 'diff') {
+        try {
+          const originalResult = await filesApi.getOriginal(taskId.value, filePath)
+          originalContent.value = originalResult.content
+        } catch (origErr: any) {
+          originalContent.value = ''
+        }
+      } else {
+        originalContent.value = cached.content
+      }
+
+      // Extract symbols for supported file types (both editor and diff mode)
+      if (isSupportedFileType.value) {
+        extractSymbols(cached.content, detectLanguage(filePath))
+      }
+
+      loadingContent.value = false
+      return
+    }
+
+    // Cache miss or stale - fetch from server
+    const result = await filesApi.read(taskId.value, filePath)
+    fileContent.value = result.content
+
+    // Update cache
+    if (result.hash) {
+      FileCacheService.set(taskId.value, filePath, result.hash, result.content)
+    }
+
+    // If diff mode, load original content from git
+    if (mode === 'diff') {
+      try {
+        const originalResult = await filesApi.getOriginal(taskId.value, filePath)
+        originalContent.value = originalResult.content
+      } catch (origErr: any) {
+        // If getting original fails (new file), use empty string
+        originalContent.value = ''
+      }
+    } else {
+      originalContent.value = result.content
+    }
+  } catch (err: any) {
+    // Hash endpoint failed or other error - fall back to direct fetch
+    console.warn('Cache check failed, fetching directly:', err.message)
+    try {
+      const result = await filesApi.read(taskId.value, filePath)
+      fileContent.value = result.content
+
+      // Cache the result if we have a hash
+      if (result.hash) {
+        FileCacheService.set(taskId.value, filePath, result.hash, result.content)
+      }
+
+      if (mode === 'diff') {
+        try {
+          const originalResult = await filesApi.getOriginal(taskId.value, filePath)
+          originalContent.value = originalResult.content
+        } catch (origErr: any) {
+          originalContent.value = ''
+        }
+      } else {
+        originalContent.value = result.content
+      }
+    } catch (readErr: any) {
+      fileContent.value = ''  // Clear previous content
+      originalContent.value = ''  // Clear original content too
+      saveError.value = readErr.message || 'Failed to load file'
+    }
+  }
+  // === CACHE LOGIC END ===
+
+  // Extract symbols for supported file types (both editor and diff mode)
+  if (currentFile.value && fileContent.value && isSupportedFileType.value) {
+    extractSymbols(fileContent.value, detectLanguage(currentFile.value))
+  }
+
+  loadingContent.value = false
+}
+
+const saveFile = async () => {
+  if (!currentFile.value) return
+
+  savingContent.value = true
+  saveError.value = ''
+
+  try {
+    await filesApi.write(taskId.value, currentFile.value, fileContent.value)
+    originalContent.value = fileContent.value
+    // Refresh changed files list after save
+    await loadChangedFiles()
+  } catch (err: any) {
+    saveError.value = err.message || 'Failed to save file'
+  }
+
+  savingContent.value = false
+}
+
+// Conflict editor handlers
+const handleConflictContentUpdate = (newContent: string) => {
+  fileContent.value = newContent
+}
+
+const handleConflictResolved = () => {
+  // All conflicts resolved - just update UI state
+  // The user still needs to save the file manually
+  // When they save, saveConflictFile will handle git add if no conflicts remain
+}
+
+// Save conflict file (partial save - doesn't require all conflicts resolved)
+const saveConflictFile = async () => {
+  if (!currentFile.value) return
+
+  savingContent.value = true
+  saveError.value = ''
+
+  try {
+    await filesApi.write(taskId.value, currentFile.value, fileContent.value)
+    originalContent.value = fileContent.value
+
+    // Check if all conflicts resolved - if so, stage the file
+    const unresolvedCount = conflictEditorRef.value?.unresolvedCount ?? 0
+    if (unresolvedCount === 0) {
+      await filesApi.stageFile(taskId.value, currentFile.value)
+      editorMode.value = 'editor'  // Switch back to normal editor mode
+    }
+
+    // Refresh changed files list after save
+    await loadChangedFiles()
+  } catch (err: any) {
+    saveError.value = err.message || 'Failed to save file'
+  }
+
+  savingContent.value = false
+}
+
+const openMarkdownPreview = () => {
+  if (!currentFile.value || !currentFile.value.toLowerCase().endsWith('.md')) {
+    return
+  }
+  markdownPreviewPath.value = currentFile.value
+  markdownPreviewContent.value = fileContent.value
+  showMarkdownPreview.value = true
+}
+
+// Symbol outline handlers
+function handleSymbolSelect(symbol: SymbolInfo) {
+  if (editorMode.value === 'diff' && diffEditorRef.value) {
+    // For diff editor, navigate to line in the modified editor
+    const diffEditor = diffEditorRef.value.getDiffEditor()
+    if (diffEditor) {
+      const modifiedEditor = diffEditor.getModifiedEditor()
+      modifiedEditor.revealLineInCenter(symbol.lineNumber)
+      modifiedEditor.setSelection({
+        startLineNumber: symbol.lineNumber,
+        startColumn: 1,
+        endLineNumber: symbol.lineNumber,
+        endColumn: 1
+      })
+      modifiedEditor.focus()
+    }
+  } else if (editorRef.value) {
+    editorRef.value.goToLine(symbol.lineNumber)
+  }
+}
+
+function handleCursorWord(word: string, _position: { lineNumber: number; column: number }) {
+  if (outlineRef.value) {
+    outlineRef.value.loadPreviewBySymbolName(word)
+  }
+}
+
+async function handleSymbolNavigate(filePath: string, lineNumber: number) {
+  // If the file is different from current, load it first
+  if (currentFile.value !== filePath) {
+    await loadFile(filePath, 'editor')
+  }
+  // Then navigate to the line after the file loads
+  nextTick(() => {
+    if (editorRef.value) {
+      editorRef.value.goToLine(lineNumber)
+    }
+  })
+}
+
+function handleOutlineToggle() {
+  outlineCollapsed.value = !outlineCollapsed.value
+  localStorage.setItem('v2c-outline-collapsed', String(outlineCollapsed.value))
+
+  // When SYMBOLS expands, collapse Preview (accordion behavior)
+  if (!outlineCollapsed.value) {
+    previewCollapsed.value = true
+    localStorage.setItem('v2c-preview-collapsed', 'true')
+  }
+
+  // Extract symbols when expanding if not already done
+  if (!outlineCollapsed.value && currentFile.value && fileContent.value && isSupportedFileType.value) {
+    extractSymbols(fileContent.value, detectLanguage(currentFile.value))
+  }
+}
+
+function handlePreviewToggle() {
+  previewCollapsed.value = !previewCollapsed.value
+  localStorage.setItem('v2c-preview-collapsed', String(previewCollapsed.value))
+
+  // When Preview expands, collapse SYMBOLS (accordion behavior)
+  if (!previewCollapsed.value) {
+    outlineCollapsed.value = true
+    localStorage.setItem('v2c-outline-collapsed', 'true')
+  }
+}
+
+function handleContentChange() {
+  if (currentFile.value && fileContent.value && isSupportedFileType.value) {
+    debouncedExtractSymbols(fileContent.value, currentFile.value)
+  }
+}
+
+// Handle file selection from quick jump modal
+const handleQuickJumpFileSelect = (filePath: string) => {
+  loadFile(filePath, 'editor')
+}
+
+const openMergeDialog = () => {
+  mergeMessage.value = task.value?.name || ''
+  showMergeDialog.value = true
+}
+
+const mergeTask = () => {
+  openMergeDialog()
+}
+
+const confirmMerge = async () => {
+  showMergeDialog.value = false
+
+  // Check for uncommitted changes first
+  if (changedFiles.value.length > 0) {
+    mergeError.value = `Please accept changes first. Found ${changedFiles.value.length} uncommitted file(s).`
+    return
+  }
+
+  syncing.value = true
+  syncStep.value = 'Fetching latest changes...'
+  mergeError.value = ''
+  mergeSuccess.value = false
+  mergeExecutionLog.value = null
+
+  try {
+    syncStep.value = 'Merging main into worktree...'
+    // Use custom message from dialog
+    const response = await tasksApi.merge(taskId.value, mergeMessage.value)
+
+    if (response.conflicts) {
+      // Handle conflicts
+      syncing.value = false
+      mergeError.value = response.message || 'Merge failed due to conflicts'
+      mergeExecutionLog.value = response.execution_log || null
+      return
+    }
+
+    if (!response.success) {
+      // Handle merge failure
+      syncing.value = false
+      mergeError.value = response.message || 'Merge failed'
+      mergeExecutionLog.value = response.execution_log || null
+      return
+    }
+
+    // Success
+    syncing.value = false
+    mergeSuccess.value = true
+    await loadTask()
+    await loadChangedFiles()
+    await loadCommits(true)  // Refresh commits after merge
+    await loadButtonStates()  // Refresh button states after merge
+
+  } catch (err: any) {
+    syncing.value = false
+    mergeError.value = err.message || 'Merge failed'
+  }
+}
+
+const loadConflictedFile = async (filePath: string) => {
+  try {
+    // Load the conflicted file in diff mode
+    await loadFile(filePath, 'diff')
+    // Close the conflict modal and clear error (after file loads successfully)
+    hasConflicts.value = false
+    syncNeedsResolution.value = false
+    mergeError.value = ''  // Clear error to prevent error dialog from showing
+    mergeExecutionLog.value = null  // Clear execution log
+  } catch (err: any) {
+    // Keep modal open on error, don't reset state
+    console.error('Failed to load conflicted file:', err)
+  }
+}
+
+const dismissConflictModal = () => {
+  hasConflicts.value = false
+  syncNeedsResolution.value = false
+  mergeError.value = ''  // Clear error to prevent dialog from showing
+  mergeExecutionLog.value = null  // Clear execution log
+}
+
+const copyExecutionLog = () => {
+  if (!mergeExecutionLog.value) return
+
+  const logText = mergeExecutionLog.value.map(cmd => {
+    let text = `$ ${cmd.command}\n`
+    if (cmd.exit_code !== 0) {
+      text += `✗ Exit code: ${cmd.exit_code}\n`
+    }
+    if (cmd.stdout) {
+      text += `${cmd.stdout}\n`
+    }
+    if (cmd.stderr) {
+      text += `${cmd.stderr}\n`
+    }
+    return text
+  }).join('\n')
+
+  navigator.clipboard.writeText(logText).catch(err => {
+    console.error('Failed to copy execution log:', err)
+  })
+}
+
+const openCommitMessageModal = () => {
+  commitMessage.value = `Accept changes for ${task.value?.name || 'task'}`
+  showCommitMessageModal.value = true
+}
+
+const acceptChanges = async () => {
+  showCommitMessageModal.value = false
+  accepting.value = true
+  acceptError.value = ''
+  acceptSuccess.value = false
+
+  try {
+    await tasksApi.accept(taskId.value, commitMessage.value)
+    acceptSuccess.value = true
+    // Reload changed files to update the list
+    await loadChangedFiles()
+    // Reload commits to show the new commit
+    await loadCommits(true)
+    // Refresh button states
+    await loadButtonStates()
+    // Auto-hide success message after 2 seconds
+    setTimeout(() => {
+      acceptSuccess.value = false
+    }, 2000)
+  } catch (err: any) {
+    acceptError.value = err.message || 'Accept failed'
+  }
+
+  accepting.value = false
+}
+
+const loadButtonStates = async () => {
+  // Guard against navigation/unmounting - don't make API calls if taskId is undefined
+  if (!taskId.value) return
+
+  try {
+    buttonStates.value = await tasksApi.getButtonStates(taskId.value)
+    console.log('[Button States Debug]', {
+      can_merge: buttonStates.value.can_merge,
+      can_accept: buttonStates.value.can_accept,
+      task_status: task.value?.task_status,
+      last_merge_commit_hash: task.value?.last_merge_commit_hash,
+      task_id: taskId.value
+    })
+  } catch (err: any) {
+    console.error('Failed to load button states:', err)
+  }
+}
+
+const refreshStatus = async () => {
+  // Guard against navigation/unmounting - don't make API calls if taskId is undefined
+  if (!taskId.value) return
+
+  try {
+    const status = await tasksApi.getStatus(taskId.value)
+    if (task.value) {
+      task.value.task_status = status.task_status
+      task.value.code_status = status.code_status
+      task.value.last_task_status_check = status.last_task_status_check
+      task.value.last_code_status_check = status.last_code_status_check
+    }
+  } catch (err: any) {
+    console.error('Failed to refresh status:', err)
+  }
+}
+
+const toggleDir = async (path: string) => {
+  const node = getNode(path)
+  if (!node) return
+
+  if (expandedDirs.value.has(path)) {
+    collapseDir(path)
+  } else {
+    await expandDir(path)
+  }
+}
+
+// Helper functions for FileTreeItem
+const isChanged = (path: string) => changedFiles.value.some(f => f.path === path)
+const isSelected = (path: string) => currentFile.value === path && editorMode.value === 'editor'
+const isLoading = (path: string) => loadingPaths.value.has(path)
+const getFileStatus = (path: string) => changedFiles.value.find(f => f.path === path)?.status
+
+// Provide helper functions to child components
+provide('isChanged', isChanged)
+provide('isSelected', isSelected)
+provide('isLoading', isLoading)
+provide('getFileStatus', getFileStatus)
+
+const loadCommits = async (silent: boolean = false) => {
+  // Guard against navigation/unmounting - don't make API calls if taskId is undefined
+  if (!taskId.value) return
+
+  if (!silent) {
+    loadingCommits.value = true
+  }
+  commitsError.value = ''
+
+  try {
+    commitsData.value = await gitApi.getWorktreeCommits(taskId.value, currentPage.value)
+    console.log('[DEBUG] API Response:', commitsData.value)
+    const newCommits = commitsData.value?.items
+    console.log('[DEBUG] newCommits:', newCommits)
+
+    // Always update commits list
+    if (newCommits) {
+      commits.value = newCommits
+      console.log('[DEBUG] commits.value set to:', commits.value.length, 'commits')
+
+      // Check if commit data has changed for highlighting
+      if (isNewCommitData(newCommits)) {
+        // Get hashes of new commits for highlighting
+        newCommitHashes.value = getNewCommitHashes(newCommits)
+        console.log('New commits detected:', Array.from(newCommitHashes.value))
+      }
+    } else {
+      console.log('[DEBUG] newCommits is falsy, not updating commits.value')
+    }
+  } catch (err: any) {
+    console.error('[DEBUG] Failed to load commits:', err)
+    console.error('[DEBUG] Error details:', err.message, err.stack)
+    if (!silent) {
+      commitsError.value = err.message || 'Failed to load commits'
+    }
+  }
+
+  if (!silent) {
+    loadingCommits.value = false
+  }
+}
+
+const handlePageChange = (page: number) => {
+  // Prevent concurrent requests
+  if (loadingCommits.value) return
+
+  currentPage.value = page
+  loadingCommits.value = true
+
+  gitApi.getWorktreeCommits(taskId.value, page)
+    .then((data) => {
+      commitsData.value = data
+      commits.value = data?.items || []
+    })
+    .catch((error: any) => {
+      if (error.status === 422) {
+        // Validation error - reset to page 1
+        currentPage.value = 1
+        loadCommits()
+      } else {
+        commitsError.value = 'Failed to load commits'
+      }
+    })
+    .finally(() => {
+      loadingCommits.value = false
+    })
+
+  // Scroll to top of commits list with better selector
+  const commitsPane = document.querySelector('.commits-list')
+  if (commitsPane) {
+    commitsPane.scrollTop = 0
+  } else {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
+
+const handleShowContextMenu = (event: {
+  x: number
+  y: number
+  path: string
+  type: string
+  source?: 'files' | 'changedFiles'
+}) => {
+  contextMenu.value = {
+    show: true,
+    x: event.x,
+    y: event.y,
+    path: event.path,
+    type: event.type,
+    source: event.source || 'files',  // default to 'files'
+    commit: null
+  }
+}
+
+const handleCommitContextMenu = (event: { x: number; y: number; commit: CommitInfo }) => {
+  contextMenu.value = {
+    show: true,
+    x: event.x,
+    y: event.y,
+    path: '',
+    type: '',
+    source: 'commits',
+    commit: event.commit
+  }
+}
+
+// Close context menu when clicking anywhere in the view
+const closeContextMenuOnClick = () => {
+  if (contextMenu.value.show) {
+    closeContextMenu()
+  }
+}
+
+const closeContextMenu = () => {
+  contextMenu.value.show = false
+}
+
+// Upload state
+const fileInputRef = ref<HTMLInputElement>()
+const uploadProgress = ref({
+  show: false,
+  current: 0,
+  total: 0,
+  currentFile: '',
+  cancelled: false
+})
+
+// Upload handlers
+const handleUploadFiles = () => {
+  closeContextMenu()
+  fileInputRef.value?.click()
+}
+
+const handleFileSelect = async (e: Event) => {
+  const target = e.target as HTMLInputElement
+  const files = target.files
+  if (!files || files.length === 0) return
+
+  // Determine target path
+  const path = contextMenu.value.path
+  const type = contextMenu.value.type
+  let targetPath = ''
+
+  if (type === 'directory') {
+    targetPath = path
+  } else {
+    // For files, upload to parent directory
+    targetPath = path.split('/').slice(0, -1).join('/')
+  }
+
+  // Reset and show progress
+  uploadProgress.value = {
+    show: true,
+    current: 0,
+    total: files.length,
+    currentFile: files[0]?.name || '',
+    cancelled: false
+  }
+
+  try {
+    // Upload files sequentially
+    for (let i = 0; i < files.length; i++) {
+      if (uploadProgress.value.cancelled) {
+        break
+      }
+
+      uploadProgress.value.current = i
+      uploadProgress.value.currentFile = files[i].name
+
+      // Upload single file
+      const formData = new FormData()
+      formData.append('files', files[i])
+      formData.append('target_path', targetPath)
+
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(`${import.meta.env.VITE_API_BASE || '/api'}/tasks/${taskId.value}/files/upload`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Upload failed' }))
+        console.error(`Failed to upload ${files[i].name}:`, error.detail || error.message)
+      }
+    }
+
+    // Reload files to show new uploads
+    await loadFileTree()
+    await loadChangedFiles()
+  } catch (error) {
+    console.error('Upload error:', error)
+  } finally {
+    uploadProgress.value.show = false
+    target.value = '' // Reset file input
+  }
+}
+
+const cancelUpload = () => {
+  uploadProgress.value.cancelled = true
+}
+
+// Download handler
+const handleDownloadFile = () => {
+  closeContextMenu()
+  const path = contextMenu.value.path
+  try {
+    filesApi.downloadFile(taskId.value, path)
+  } catch (error) {
+    console.error('Download failed:', error)
+  }
+}
+
+const contextMenuItems = computed<MenuItem[]>(() => {
+  const items: MenuItem[] = [
+    {
+      label: 'Copy Path',
+      icon: '📋',
+      action: () => {
+        console.log('[ContextMenu] Copy Path clicked, path:', contextMenu.value.path)
+        copyPathToClipboard(contextMenu.value.path)
+      }
+    }
+  ]
+
+  // Add different menu items based on source
+  if (contextMenu.value.source === 'files') {
+    items.push({
+      label: 'Upload Files',
+      icon: '⬆️',
+      action: () => handleUploadFiles(),
+      disabled: uploadProgress.value.show
+    })
+    items.push({
+      label: contextMenu.value.type === 'directory' ? 'Download (ZIP)' : 'Download',
+      icon: contextMenu.value.type === 'directory' ? '📦' : '⬇️',
+      action: () => handleDownloadFile(),
+      disabled: false
+    })
+    items.push({
+      label: 'Delete',
+      icon: '🗑️',
+      action: async () => {
+        const path = contextMenu.value.path
+        const confirmed = await showConfirm({
+          title: 'Delete Item',
+          message: `Are you sure you want to delete ${path}?`,
+          confirmText: 'Delete',
+          danger: true
+        })
+
+        if (!confirmed) {
+          closeContextMenu()
+          return
+        }
+
+        closeContextMenu()
+        try {
+          await filesApi.deleteFile(taskId.value, path)
+          await loadChangedFiles()
+        } catch (error) {
+          console.error('Failed to delete file:', error)
+        }
+      },
+      danger: true
+    })
+  } else if (contextMenu.value.source === 'changedFiles') {
+    items.push({
+      label: 'Revert',
+      icon: '↩️',
+      action: async () => {
+        const path = contextMenu.value.path
+
+        // Check if file is tracked for appropriate confirmation message
+        const file = changedFiles.value.find(f => f.path === path)
+        const isUntracked = file?.status === '?'
+
+        const confirmed = await showConfirm({
+          title: 'Revert Changes',
+          message: isUntracked
+            ? `This file is untracked and will be deleted: ${path}`
+            : `Revert all changes to: ${path}`,
+          confirmText: 'Revert',
+          danger: true
+        })
+
+        if (!confirmed) {
+          closeContextMenu()
+          return
+        }
+
+        closeContextMenu()
+        try {
+          const result = await filesApi.revertFile(taskId.value, path)
+          if (result.success) {
+            // Show appropriate success message based on tracking
+            if (result.is_tracked) {
+              console.log('[Revert] File reverted successfully')
+            } else {
+              console.log('[Revert] Untracked file deleted')
+            }
+            await loadChangedFiles()
+            // If the reverted file was the current file, clear it
+            if (currentFile.value === path) {
+              currentFile.value = null
+            }
+          }
+        } catch (error: any) {
+          console.error('Failed to revert file:', error)
+        }
+      },
+      danger: true
+    })
+  } else if (contextMenu.value.source === 'commits' && contextMenu.value.commit) {
+    const commit = contextMenu.value.commit
+    const commitIndex = commits.value.findIndex(c => c.hash === commit.hash)
+    const commitsToUndo = commitIndex >= 0 ? commitIndex : 0
+
+    items.push({
+      label: 'Reset to this commit',
+      icon: '↩️',
+      action: async () => {
+        const confirmed = await showConfirm({
+          title: `Reset to commit ${commit.hash.slice(0, 8)}?`,
+          message: `This will undo ${commitsToUndo} commit(s).\nChanges will be kept in working directory.`,
+          confirmText: 'Reset',
+          cancelText: 'Cancel',
+          danger: true
+        })
+
+        if (!confirmed) {
+          closeContextMenu()
+          return
+        }
+
+        closeContextMenu()
+        try {
+          const result = await gitApi.resetToCommit(taskId.value, commit.hash)
+          if (result.success) {
+            await loadCommits()
+            await loadChangedFiles()
+          } else {
+            console.error('Reset failed:', result.message)
+          }
+        } catch (error) {
+          console.error('Failed to reset:', error)
+        }
+      },
+      danger: true
+    })
+
+    // Add "Reset to this commit (include it)" option
+    items.push({
+      label: 'Reset to this commit (include it)',
+      icon: '↩️',
+      action: async () => {
+        const confirmed = await showConfirm({
+          title: `Reset to before commit ${commit.hash.slice(0, 8)}?`,
+          message: `This will undo ${commitsToUndo + 1} commit(s).\nChanges will be kept in working directory.`,
+          confirmText: 'Reset',
+          cancelText: 'Cancel',
+          danger: true
+        })
+
+        if (!confirmed) {
+          closeContextMenu()
+          return
+        }
+
+        closeContextMenu()
+        try {
+          const result = await gitApi.resetToCommit(taskId.value, commit.hash, true)
+          if (result.success) {
+            await loadCommits()
+            await loadChangedFiles()
+          } else {
+            console.error('Reset failed:', result.message)
+          }
+        } catch (error) {
+          console.error('Failed to reset:', error)
+        }
+      },
+      danger: true
+    })
+  }
+
+  return items
+})
+
+const copyPathToClipboard = async (path: string) => {
+  try {
+    await navigator.clipboard.writeText(path)
+    console.log('Copied to clipboard:', path)
+  } catch {
+    const textArea = document.createElement('textarea')
+    textArea.value = path
+    document.body.appendChild(textArea)
+    textArea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textArea)
+    console.log('Copied to clipboard (fallback):', path)
+  }
+}
+
+// Touch handlers for Changed Files context menu
+let changedFilesTouchTimer: ReturnType<typeof setTimeout> | null = null
+
+const handleChangedFilesTouchStart = (e: TouchEvent, filePath: string) => {
+  changedFilesTouchTimer = setTimeout(() => {
+    handleShowContextMenu({
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      path: filePath,
+      type: 'file',
+      source: 'changedFiles'
+    })
+  }, 500)
+}
+
+const handleChangedFilesTouchEnd = () => {
+  if (changedFilesTouchTimer) {
+    clearTimeout(changedFilesTouchTimer)
+    changedFilesTouchTimer = null
+  }
+}
+
+const handleChangedFilesTouchMove = () => {
+  if (changedFilesTouchTimer) {
+    clearTimeout(changedFilesTouchTimer)
+    changedFilesTouchTimer = null
+  }
+}
+
+const loadCommitDiff = async (commitHash: string) => {
+  loadingCommitDiff.value = true
+  commitDiffError.value = ''
+  expandedFilesInCommit.value.clear()
+  currentFile.value = null  // Clear file context
+
+  try {
+    console.log('[DEBUG] Loading commit diff for:', commitHash)
+    console.log('[DEBUG] taskId:', taskId.value)
+    selectedCommit.value = await gitApi.getCommitDiff(taskId.value, commitHash)
+    console.log('[DEBUG] Received commit diff:', selectedCommit.value)
+    console.log('[DEBUG] Files in commit:', selectedCommit.value?.files?.length || 'N/A')
+    console.log('[DEBUG] Setting editorMode to commit-diff')
+    editorMode.value = 'commit-diff'
+  } catch (err: any) {
+    console.error('[DEBUG] Failed to load commit diff:', err)
+    console.error('[DEBUG] Error details:', err.message, err.stack)
+    commitDiffError.value = err.message || 'Failed to load commit diff'
+  }
+
+  loadingCommitDiff.value = false
+}
+
+const closeCommitDiff = () => {
+  selectedCommit.value = null
+  expandedFilesInCommit.value.clear()
+  commitDiffError.value = ''
+  editorMode.value = 'editor'
+}
+
+const computeCommitsHash = (commits: CommitInfo[]): string => {
+  return commits.map(c => c.hash).sort().join(',')
+}
+
+const isNewCommitData = (newCommits: CommitInfo[]): boolean => {
+  const newHash = computeCommitsHash(newCommits)
+  const changed = newHash !== lastCommitsHash.value
+  lastCommitsHash.value = newHash
+  return changed
+}
+
+const getNewCommitHashes = (newCommits: CommitInfo[]): Set<string> => {
+  if (!lastCommitsHash.value) {
+    return new Set()  // First load, no highlights
+  }
+  const oldHashes = lastCommitsHash.value.split(',')
+  return new Set(newCommits.map(c => c.hash).filter(h => !oldHashes.includes(h)))
+}
+
+// Auto-refresh
+let refreshTimer: number | null = null
+
+const startRefresh = () => {
+  refreshTimer = window.setInterval(() => {
+    loadChangedFiles()
+    loadButtonStates()  // Real-time check for button states
+    refreshStatus()      // Update status display
+    loadCommits(true)   // Silent refresh, no loading spinner
+  }, 15000)  // Changed from 5000 to 15000 (15 seconds)
+}
+
+const stopRefresh = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+onMounted(async () => {
+  console.log('[Layout Debug] onMounted started')
+  // Load task data first
+  await loadTask()
+  console.log('[Layout Debug] Task loaded, taskId:', taskId.value)
+  loadLayout()
+  console.log('[Layout Debug] Layout after loadLayout:', layout.value)
+
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+  window.addEventListener('keydown', handleGlobalKeydown)
+  loadFileTree()
+  loadChangedFiles().then(() => {
+    initialLoading.value = false
+  })
+  loadCommits()       // Initial commits load
+  loadButtonStates()  // Initial button state load
+  refreshStatus()     // Initial status load
+  startRefresh()
+  console.log('[Layout Debug] onMounted completed')
+})
+
+// Global keyboard handler for Ctrl+P and Ctrl+S
+const handleGlobalKeydown = (e: KeyboardEvent) => {
+  if (e.ctrlKey && e.key === 'p') {
+    e.preventDefault()
+    showFileQuickJump.value = true
+  }
+  // Ctrl+S for conflict mode save
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    if (editorMode.value === 'conflict' && fileContent.value !== originalContent.value) {
+      e.preventDefault()
+      saveConflictFile()
+    }
+  }
+}
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  stopRefresh()
+  // Clean up image preview URL
+  if (imagePreviewUrl.value) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+  }
+})
+</script>
+
+<template>
+  <div class="h-screen flex flex-col overflow-hidden">
+    <!-- Full-screen loading overlay -->
+    <div v-if="!layoutLoaded" class="fixed inset-0 z-50 flex items-center justify-center bg-main">
+      <div class="spinner w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-main border-b border-main">
+      <div class="max-w-full mx-auto px-3 sm:px-4 lg:px-6 py-1 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <button @click="goBackToTasks()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 class="text-lg font-semibold text-main hidden md:block">{{ task?.name || 'Task' }}</h1>
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- File list button (mobile only) -->
+          <button
+            @click="toggleFileList"
+            class="md:hidden p-1.5 rounded-lg hover:bg-sub"
+            title="Files"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+          </button>
+          <button
+            @click="toggleTerminal"
+            class="p-1.5 rounded-lg hover:bg-sub"
+            title="Terminal"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+          <button @click="cycleTheme" class="p-1.5 rounded-lg hover:bg-sub" title="Cycle theme">
+            <!-- Sun icon for light theme -->
+            <svg v-if="theme === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <!-- Moon icon for dark theme -->
+            <svg v-else-if="theme === 'dark'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+            <!-- Leaf icon for green theme -->
+            <svg v-else-if="theme === 'green'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+            <!-- Document icon for parchment theme -->
+            <svg v-else-if="theme === 'parchment'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </button>
+          <GlobalTerminalIcon />
+          <button @click="showSettingsModal = true" class="p-1.5 rounded-lg hover:bg-sub" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Direct on branch notice -->
+    <div v-if="task?.direct_on_branch" class="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-2">
+      <div class="max-w-full mx-auto flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span>This task works directly on main branch.</span>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <splitpanes v-if="layoutLoaded" ref="mainSplitpanesRef" class="default-theme flex-1 min-h-0 flex" @resize="handleMainResize">
+      <!-- Sidebar pane -->
+      <pane v-if="!isMobile || showFileList" :size="isMobile && showFileList ? 100 : layout.sidebar" :min-size="isMobile && showFileList ? 100 : 10"
+            @click="isMobile && loadFile(null, 'editor')">
+        <splitpanes ref="sidebarSplitpanesRef" horizontal class="default-theme h-full" @resize="handleSidebarResize">
+          <!-- File tree -->
+          <pane :size="layout.changedFiles" :min-size="5" class="flex flex-col min-h-0 bg-main border-r border-main">
+            <div class="flex-[1] p-4 border-b border-main overflow-y-auto min-h-0">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-main">Files</h3>
+                <button @click="loadFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+              <div v-if="loadingFiles" class="flex items-center justify-center py-4">
+                <div class="spinner"></div>
+              </div>
+              <div v-else class="file-tree text-sm" @click="closeContextMenuOnClick">
+                <FileTreeItem
+                  v-for="path in rootPaths"
+                  :key="path"
+                  :path="path"
+                  :level="0"
+                  @toggle="toggleDir"
+                  @select-file="loadFile"
+                  @show-context-menu="handleShowContextMenu"
+                />
+                <div v-if="rootPaths.length === 0" class="text-xs text-sub py-2">No files found (rootPaths empty)</div>
+              </div>
+            </div>
+          </pane>
+
+          <!-- Changed files -->
+          <pane :size="layout.files" :min-size="10" class="flex flex-col min-h-0 bg-main border-r border-main">
+            <div class="changed-files-list flex-[1] p-4 border-b border-main overflow-y-auto min-h-0">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-main">Changes</h3>
+                <button
+                  @click="openCommitMessageModal"
+                  :disabled="accepting"
+                  :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
+                  title="Accept"
+                >
+                  <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+              </div>
+              <div v-if="initialLoading" class="flex items-center justify-center py-4">
+                <div class="spinner"></div>
+              </div>
+              <div v-else-if="changedFiles.length === 0" class="text-xs text-sub py-2">
+                No changes detected
+              </div>
+              <div v-else class="space-y-1" @click="closeContextMenuOnClick">
+                <div
+                  v-for="file in changedFiles"
+                  :key="file.path"
+                  @click="loadFile(file.path, 'diff')"
+                  @contextmenu.prevent.stop="(e) => handleShowContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    path: file.path,
+                    type: 'file',
+                    source: 'changedFiles'
+                  })"
+                  @touchstart="(e) => handleChangedFilesTouchStart(e, file.path)"
+                  @touchend="handleChangedFilesTouchEnd"
+                  @touchmove="handleChangedFilesTouchMove"
+                  :class="['text-xs px-2 py-1 rounded cursor-pointer hover:bg-sub flex items-center justify-between gap-2', currentFile === file.path && editorMode === 'diff' ? 'item-selected' : '']"
+                  :title="file.path"
+                >
+                  <span :class="['truncate flex-1', currentFile === file.path && editorMode === 'diff' ? 'text-main font-medium' : 'text-green-600 dark:text-green-400']">{{ file.path }}</span>
+                  <span class="px-1.5 py-0.5 rounded text-xs font-mono font-medium min-w-[20px] text-center flex-shrink-0"
+                    :class="{
+                      'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': file.status === 'A',
+                      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': file.status === 'M',
+                      'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': file.status === 'D',
+                      'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': file.status === 'R',
+                      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400': file.status === 'C',
+                      'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400': file.status === 'U',
+                      'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400': file.status === 'T',
+                      'bg-gray-50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-500': file.status === '?'
+                    }">{{ file.status }}</span>
+                </div>
+              </div>
+              <!-- Pagination - only show when total > 20 -->
+              <Pagination
+                v-if="changedFilesData && changedFilesData.total > 20"
+                :total="changedFilesData.total"
+                :page="changedFilesData.page"
+                :page-size="changedFilesData.page_size"
+                :total-pages="changedFilesData.total_pages"
+                @page-change="handleChangedFilesPageChange"
+              />
+            </div>
+          </pane>
+
+          <!-- Commits -->
+          <pane :size="layout.commits" :min-size="5" class="flex flex-col min-h-0 bg-main border-r border-main">
+            <div class="flex-[1] p-4 border-t border-main overflow-y-auto min-h-0">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-main">Commits</h3>
+                <div class="flex gap-1">
+                  <button
+                    v-if="!task?.direct_on_branch"
+                    @click="mergeTask"
+                    :disabled="syncing"
+                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
+                    title="Merge"
+                  >
+                    <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <CommitsList
+                :commits="commits"
+                :loading="loadingCommits"
+                :error="commitsError"
+                :lastMergeCommitHash="task?.last_merge_commit_hash"
+                :newCommitHashes="newCommitHashes"
+                @select="loadCommitDiff"
+                @showContextMenu="handleCommitContextMenu"
+              />
+              <Pagination
+                v-if="commitsData"
+                :total="commitsData.total"
+                :page="commitsData.page"
+                :page-size="commitsData.page_size"
+                :total-pages="commitsData.total_pages"
+                @page-change="handlePageChange"
+              />
+            </div>
+          </pane>
+        </splitpanes>
+      </pane>
+
+      <!-- Editor pane -->
+      <pane v-if="!isMobile || !showFileList"
+            :size="(isMobile && showFileList) ? 0 : (isMobile ? 100 : (100 - layout.sidebar))"
+            :min-size="(isMobile && showFileList) ? 0 : 20">
+        <splitpanes ref="editorSplitpanesRef" vertical class="default-theme h-full min-h-0" @resize="handleEditorResize">
+          <pane :size="isMobile && showTerminal ? 0 : (showTerminal ? (100 - layout.terminal) : 100)" :min-size="isMobile && showTerminal ? 0 : 20" class="flex flex-col min-h-0">
+            <!-- Editor area -->
+            <main class="flex-1 flex flex-col overflow-hidden bg-main">
+              <!-- Editor header -->
+              <div v-if="currentFile || selectedCommit || imagePreviewFile" class="bg-sub border-b border-main px-4 py-1 flex items-center gap-2 min-h-[32px]">
+                <div class="text-sm text-sub flex items-center gap-2 min-w-0 flex-1 truncate">
+                  <span v-if="imagePreviewFile" class="text-base shrink-0">🖼️</span>
+                  <span v-else-if="editorMode === 'commit-diff'" class="text-base shrink-0">📋</span>
+                  <span v-else-if="editorMode === 'conflict'" class="text-base shrink-0">⚠️</span>
+                  <span v-else-if="editorMode === 'deleted'" class="text-base shrink-0">🗑️</span>
+                  <span v-else-if="editorMode === 'diff'" class="text-base shrink-0">🔄</span>
+                  <span v-else class="text-base shrink-0">📝</span>
+                  <span v-if="imagePreviewFile" class="truncate">
+                    {{ imagePreviewFile }}
+                  </span>
+                  <span v-else-if="editorMode === 'commit-diff' && selectedCommit" class="truncate">
+                    Commit: {{ selectedCommit.hash }} - {{ selectedCommit.message }}
+                  </span>
+                  <span v-else class="truncate">
+                    {{ currentFile }}{{ isFileDeleted ? ' (deleted)' : '' }}{{ editorMode === 'conflict' ? ' (conflict)' : '' }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span v-if="savingContent" class="spinner-xs"></span>
+                  <button
+                    v-if="editorMode === 'diff'"
+                    @click="goToPrevDiff"
+                    :disabled="!diffEditorRef?.hasDiffs"
+                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': !diffEditorRef?.hasDiffs }]"
+                    title="Jump to previous change"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="editorMode === 'diff'"
+                    @click="goToNextDiff"
+                    :disabled="!diffEditorRef?.hasDiffs"
+                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': !diffEditorRef?.hasDiffs }]"
+                    title="Jump to next change"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="editorMode === 'commit-diff'"
+                    @click="closeCommitDiff"
+                    class="p-1.5 rounded-lg hover:bg-sub"
+                    title="Close"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="editorMode === 'editor' && (fileContent !== originalContent || savingContent)"
+                    @click="saveFile"
+                    :disabled="savingContent"
+                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': savingContent }]"
+                    title="Save"
+                  >
+                    <span v-if="savingContent" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="editorMode === 'conflict'"
+                    @click="saveConflictFile"
+                    :disabled="savingContent"
+                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': savingContent }]"
+                    title="Save"
+                  >
+                    <span v-if="savingContent" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="isMarkdownFile && editorMode === 'editor'"
+                    @click="openMarkdownPreview"
+                    class="p-1.5 rounded-lg hover:bg-sub"
+                    title="Preview Markdown"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Editor Content -->
+              <div class="flex flex-col flex-1 overflow-hidden relative">
+                <!-- Loading state -->
+                <div v-if="loadingContent || loadingCommitDiff" class="flex items-center justify-center h-full">
+                  <div class="spinner"></div>
+                </div>
+
+                <!-- Empty state -->
+                <div v-else-if="!currentFile && !selectedCommit && !pdfPromptFile && !imagePreviewFile" class="flex items-center justify-center h-full text-sub">
+                  Select a file to edit
+                </div>
+
+                <!-- PDF File Prompt -->
+                <div v-else-if="pdfPromptFile" class="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
+                  <div class="text-6xl mb-4">📄</div>
+                  <div class="text-lg mb-2 max-w-md truncate" :title="pdfPromptFile">{{ pdfPromptFile }}</div>
+                  <div class="text-sm mb-4 text-center">
+                    This is a PDF file.<br/>
+                    Open in browser to view.
+                  </div>
+
+                  <!-- Progress bar -->
+                  <div v-if="openingPdf && pdfDownloadProgress" class="w-64 mb-4">
+                    <div class="flex justify-between text-xs mb-1">
+                      <span>{{ formatFileSize(pdfDownloadProgress.loaded) }}</span>
+                      <span v-if="pdfDownloadProgress.total > 0">
+                        {{ Math.round(pdfDownloadProgress.loaded / pdfDownloadProgress.total * 100) }}%
+                      </span>
+                    </div>
+                    <div class="w-full bg-gray-700 dark:bg-gray-600 rounded-full h-2">
+                      <div
+                        class="bg-blue-500 h-2 rounded-full transition-all duration-200"
+                        :style="{ width: pdfDownloadProgress.total > 0 ? `${(pdfDownloadProgress.loaded / pdfDownloadProgress.total * 100)}%` : '0%' }"
+                      ></div>
+                    </div>
+                    <div v-if="pdfDownloadProgress.total > 0" class="text-xs text-center mt-1">
+                      {{ formatFileSize(pdfDownloadProgress.loaded) }} / {{ formatFileSize(pdfDownloadProgress.total) }}
+                    </div>
+                  </div>
+
+                  <div v-if="pdfError" class="text-red-500 text-sm mb-2">{{ pdfError }}</div>
+                  <div class="flex gap-2">
+                    <button
+                      @click="openPdfInBrowser"
+                      :disabled="openingPdf"
+                      class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 disabled:opacity-50"
+                    >
+                      {{ openingPdf ? 'Opening...' : 'Open in Browser' }}
+                    </button>
+                    <button
+                      @click="closePdfPrompt"
+                      :disabled="openingPdf"
+                      class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 dark:bg-gray-500 dark:hover:bg-gray-600 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Image Preview -->
+                <div v-else-if="imagePreviewFile" class="flex flex-col items-center justify-center h-full bg-main p-4">
+                  <div v-if="loadingImage" class="flex flex-col items-center gap-2">
+                    <div class="spinner"></div>
+                    <span class="text-sm text-sub">Loading image...</span>
+                  </div>
+                  <template v-else-if="imagePreviewUrl">
+                    <img
+                      :src="imagePreviewUrl"
+                      :alt="imagePreviewFile"
+                      class="max-w-full max-h-full object-contain rounded shadow-lg"
+                    />
+                    <div class="mt-2 text-xs text-sub truncate max-w-md" :title="imagePreviewFile">
+                      {{ imagePreviewFile.split('/').pop() }}
+                    </div>
+                  </template>
+                  <div v-else-if="imageError" class="flex flex-col items-center gap-2 text-red-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>{{ imageError }}</span>
+                    <button @click="loadImagePreview(imagePreviewFile)" class="mt-2 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+                      Retry
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Commit Diff View -->
+                <CommitDiffView
+                  v-else-if="editorMode === 'commit-diff' && selectedCommit"
+                  :commit="selectedCommit"
+                  :expandedFiles="expandedFilesInCommit"
+                />
+
+                <!-- File Diff Editor -->
+                <div v-else-if="editorMode === 'diff' && currentFile" class="flex flex-col flex-1 min-h-0">
+                  <MonacoDiffEditor
+                    ref="diffEditorRef"
+                    :original="originalContent"
+                    :modified="fileContent"
+                    :path="currentFile"
+                    :read-only="true"
+                    :is-mobile="isMobile"
+                    class="min-h-0"
+                    @cursor-word="handleCursorWord"
+                  />
+                  <SymbolOutline
+                    ref="outlineRef"
+                    v-if="isSupportedFileType"
+                    :symbols="symbols"
+                    :collapsed="outlineCollapsed"
+                    :preview-collapsed="previewCollapsed"
+                    :task-id="taskId"
+                    :current-file-path="currentFile || ''"
+                    class="flex-shrink-0"
+                    @select="handleSymbolSelect"
+                    @toggle="handleOutlineToggle"
+                    @preview-toggle="handlePreviewToggle"
+                    @navigate="handleSymbolNavigate"
+                  />
+                </div>
+
+                <!-- Regular Editor -->
+                <div v-else-if="editorMode === 'editor' && currentFile" class="flex flex-col flex-1 min-h-0">
+                  <MonacoEditor
+                    ref="editorRef"
+                    v-model="fileContent"
+                    :path="currentFile"
+                    :enable-save-shortcut="fileContent !== originalContent && !savingContent"
+                    :is-mobile="isMobile"
+                    class="min-h-0"
+                    @save="saveFile"
+                    @preview-markdown="openMarkdownPreview"
+                    @content-change="handleContentChange"
+                    @cursor-word="handleCursorWord"
+                  />
+                  <SymbolOutline
+                    ref="outlineRef"
+                    v-if="isSupportedFileType"
+                    :symbols="symbols"
+                    :collapsed="outlineCollapsed"
+                    :preview-collapsed="previewCollapsed"
+                    :task-id="taskId"
+                    :current-file-path="currentFile || ''"
+                    class="flex-shrink-0"
+                    @select="handleSymbolSelect"
+                    @toggle="handleOutlineToggle"
+                    @preview-toggle="handlePreviewToggle"
+                    @navigate="handleSymbolNavigate"
+                  />
+                </div>
+
+                <!-- Conflict Editor -->
+                <div v-else-if="editorMode === 'conflict' && currentFile" class="flex flex-col flex-1 min-h-0">
+                  <ConflictEditor
+                    ref="conflictEditorRef"
+                    :content="fileContent"
+                    :path="currentFile"
+                    :is-mobile="isMobile"
+                    class="min-h-0"
+                    @update:content="handleConflictContentUpdate"
+                    @resolved="handleConflictResolved"
+                    @save="saveConflictFile"
+                  />
+                </div>
+
+                <!-- Deleted File Editor (read-only) -->
+                <MonacoEditor
+                  v-else-if="editorMode === 'deleted' && currentFile"
+                  v-model="fileContent"
+                  :path="currentFile"
+                  :read-only="true"
+                  :is-mobile="isMobile"
+                />
+              </div>
+
+              <!-- Error message -->
+              <div v-if="saveError" class="bg-red-50 dark:bg-red-900/20 border-t border-red-200 dark:border-red-800 px-4 py-2 text-sm text-red-600 dark:text-red-400">
+                {{ saveError }}
+              </div>
+            </main>
+          </pane>
+
+          <!-- Terminal pane -->
+          <pane v-if="showTerminal && !showFileList" :size="isMobile ? 100 : layout.terminal" :min-size="isMobile ? 100 : 10" class="flex flex-col min-h-0">
+            <div class="w-full bg-main border-l border-main flex-1 flex flex-col min-h-0">
+              <Terminal :task-id="taskId" />
+            </div>
+          </pane>
+        </splitpanes>
+      </pane>
+    </splitpanes>
+
+    <!-- Context Menu -->
+    <ContextMenu
+      :show="contextMenu.show"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :items="contextMenuItems"
+      @close="closeContextMenu"
+    />
+
+    <!-- Hidden file input for upload -->
+    <input
+      ref="fileInputRef"
+      type="file"
+      multiple
+      @change="handleFileSelect"
+      class="hidden"
+    />
+
+    <!-- Upload progress modal -->
+    <div v-if="uploadProgress.show"
+         role="dialog"
+         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-md w-full">
+        <h3 class="text-lg font-semibold text-main mb-4">Uploading Files</h3>
+
+        <div class="space-y-4">
+          <!-- Progress bar -->
+          <div>
+            <div class="flex items-center justify-between text-sm mb-2">
+              <span class="text-sub">
+                {{ uploadProgress.currentFile }}
+              </span>
+              <span class="text-muted">
+                {{ uploadProgress.current }} / {{ uploadProgress.total }}
+              </span>
+            </div>
+            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
+                class="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-200"
+                :style="{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }">
+              </div>
+            </div>
+          </div>
+
+          <!-- Cancel button -->
+          <div class="flex justify-end">
+            <button @click="cancelUpload" class="btn btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sync progress modal -->
+    <div v-if="syncing"
+         role="alertdialog"
+         aria-labelledby="sync-modal-title"
+         aria-describedby="sync-modal-description"
+         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-md w-full text-center">
+        <div class="spinner mb-4" aria-hidden="true"></div>
+        <h3 id="sync-modal-title" class="text-lg font-semibold text-main mb-2">Syncing with Main</h3>
+        <p id="sync-modal-description" class="text-sub mb-4">{{ syncStep }}</p>
+        <div class="text-sm text-sub space-y-1">
+          <div :class="{ 'text-blue-600 dark:text-blue-400 font-semibold': syncStep.includes('Fetching') }">
+            Step 1/2: Fetching latest changes...
+          </div>
+          <div :class="{ 'text-blue-600 dark:text-blue-400 font-semibold': syncStep.includes('Merging') }">
+            Step 2/2: Merging main into worktree...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conflict resolution modal -->
+    <!-- TODO: Add ESC key handler for modal dismissal (requires composable) -->
+    <div v-if="hasConflicts && syncNeedsResolution"
+         role="alertdialog"
+         aria-labelledby="conflict-modal-title"
+         aria-describedby="conflict-modal-description"
+         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-2xl w-full">
+        <h3 id="conflict-modal-title" class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">
+          ⚠️ Merge Conflicts Detected
+        </h3>
+        <p id="conflict-modal-description" class="text-sub mb-4">
+          Main branch has changes that conflict with your work. Please resolve these conflicts before merging.
+        </p>
+
+        <h4 class="font-semibold text-main mb-2">
+          Conflicted Files ({{ conflictedFiles.length }})
+        </h4>
+        <div class="space-y-1 max-h-64 overflow-y-auto mb-4 border border-main rounded-lg p-2">
+          <div
+            v-for="file in conflictedFiles"
+            :key="file"
+            @click="loadConflictedFile(file)"
+            class="p-2 bg-sub rounded cursor-pointer hover:bg-tertiary flex items-center gap-2"
+          >
+            <span class="text-red-600 dark:text-red-400" aria-hidden="true">⚠️</span>
+            <span class="text-sm font-mono">{{ file }}</span>
+          </div>
+        </div>
+
+        <div class="flex justify-center">
+          <button
+            @click="dismissConflictModal"
+            class="btn btn-primary"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Merge success dialog -->
+    <div v-if="mergeSuccess" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-md w-full text-center">
+        <div class="text-4xl mb-4">✅</div>
+        <h3 class="text-lg font-semibold text-main mb-2">Merge Successful!</h3>
+        <p class="text-sub mb-4">Your changes have been merged to the main branch.</p>
+        <button @click="mergeSuccess = false" class="btn btn-primary">
+          Confirm
+        </button>
+      </div>
+    </div>
+
+    <!-- Accept success toast -->
+    <div v-if="acceptSuccess" class="fixed bottom-4 right-4 bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
+      <span class="text-green-600 dark:text-green-400 text-xl">✓</span>
+      <span class="text-green-700 dark:text-green-300 text-sm font-medium">Changes accepted and committed</span>
+    </div>
+
+    <!-- Merge error dialog -->
+    <div v-if="mergeError && !syncNeedsResolution" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <h3 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Merge Failed</h3>
+        <p class="text-sub mb-4">{{ mergeError }}</p>
+        <p class="text-sm text-sub mb-4" v-if="mergeError.includes('Main branch rolled back')">
+          The main branch has been automatically rolled back to a clean state. Your worktree changes are safe.
+        </p>
+
+        <!-- Command execution log -->
+        <div v-if="mergeExecutionLog && mergeExecutionLog.length > 0" class="mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-semibold text-sub">Command Execution Log</h4>
+            <button
+              @click="copyExecutionLog"
+              class="text-xs px-3 py-1 bg-sub hover:bg-tertiary rounded text-sub"
+            >
+              Copy Log
+            </button>
+          </div>
+          <div class="bg-gray-900 dark:bg-gray-950 rounded-lg p-4 text-xs font-mono overflow-x-auto max-h-64 overflow-y-auto">
+            <div v-for="(cmd, index) in mergeExecutionLog" :key="index" class="mb-3 last:mb-0">
+              <div class="flex items-start gap-2">
+                <span class="text-green-500 dark:text-green-400 mt-0.5 flex-shrink-0">$</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-gray-300 dark:text-gray-300 break-words whitespace-pre-wrap">{{ cmd.command }}</div>
+                  <div v-if="cmd.exit_code !== 0" class="text-red-400 dark:text-red-400 mt-1">
+                    ✗ Exit code: {{ cmd.exit_code }}
+                  </div>
+                  <div v-if="cmd.stdout" class="text-gray-400 dark:text-gray-400 mt-1 whitespace-pre-wrap">{{ cmd.stdout }}</div>
+                  <div v-if="cmd.stderr" class="text-red-400 dark:text-red-400 mt-1 whitespace-pre-wrap">{{ cmd.stderr }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button @click="mergeError = ''; mergeExecutionLog = null; showTerminal = true" class="btn btn-secondary flex-1">
+            Open Terminal
+          </button>
+          <button @click="mergeError = ''; mergeExecutionLog = null" class="btn btn-primary flex-1">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Accept error dialog -->
+    <div v-if="acceptError" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-lg w-full">
+        <h3 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Accept Failed</h3>
+        <p class="text-sub mb-4">{{ acceptError }}</p>
+        <div class="flex gap-3">
+          <button @click="acceptError = ''; showTerminal = true" class="btn btn-secondary flex-1">
+            Open Terminal
+          </button>
+          <button @click="acceptError = ''" class="btn btn-primary flex-1">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Merge commit message dialog -->
+    <div v-if="showMergeDialog"
+         role="dialog"
+         aria-labelledby="merge-dialog-title"
+         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-md w-full">
+        <h3 id="merge-dialog-title" class="text-lg font-semibold text-main mb-2">
+          Merge Task
+        </h3>
+
+        <label for="merge-message" class="block text-sm font-medium text-sub mb-2">
+          Commit Message
+        </label>
+        <input
+          id="merge-message"
+          v-model="mergeMessage"
+          type="text"
+          class="input w-full mb-4"
+          placeholder="Describe changes for this merge"
+          @keyup.enter="confirmMerge"
+          ref="mergeInputRef"
+        />
+
+        <div class="flex gap-3 justify-end">
+          <button
+            @click="showMergeDialog = false"
+            class="btn btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            @click="confirmMerge"
+            class="btn btn-primary"
+          >
+            Merge
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Markdown Preview Modal -->
+    <MarkdownPreviewModal
+      :task-id="taskId"
+      :file-path="markdownPreviewPath"
+      :content="markdownPreviewContent"
+      :show="showMarkdownPreview"
+      @close="showMarkdownPreview = false"
+    />
+
+    <!-- File Quick Jump Modal -->
+    <FileQuickJumpModal
+      :task-id="taskId"
+      :show="showFileQuickJump"
+      @close="showFileQuickJump = false"
+      @select-file="handleQuickJumpFileSelect"
+    />
+
+    <!-- Settings Modal -->
+    <TaskSettingsModal
+      v-if="showSettingsModal"
+      :task-id="taskId"
+      @close="showSettingsModal = false"
+    />
+
+    <!-- Commit Message Modal -->
+    <div v-if="showCommitMessageModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-md w-full">
+        <h3 class="text-lg font-semibold text-main mb-4">Accept Changes</h3>
+        <p class="text-sm text-sub mb-3">Enter a commit message:</p>
+        <textarea
+          v-model="commitMessage"
+          class="w-full h-24 p-3 border border-main rounded-lg bg-main text-main text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent"
+          placeholder="Enter commit message..."
+        ></textarea>
+        <div class="flex justify-end gap-2 mt-4">
+          <button
+            @click="showCommitMessageModal = false"
+            class="btn btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            @click="acceptChanges"
+            :disabled="!commitMessage.trim()"
+            :class="['btn btn-primary', { 'opacity-50 cursor-not-allowed': !commitMessage.trim() }]"
+          >
+            Accept
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script lang="ts">
+import Terminal from '@/components/Terminal/Terminal.vue'
+import MonacoEditor from '@/components/Monaco/MonacoEditor.vue'
+import MonacoDiffEditor from '@/components/Monaco/MonacoDiffEditor.vue'
+import CommitsList from '@/components/CommitsList.vue'
+import CommitDiffView from '@/components/CommitDiffView.vue'
+import Pagination from '@/components/Pagination.vue'
+
+export default {
+  components: { Terminal, MonacoEditor, MonacoDiffEditor, CommitsList, CommitDiffView, Pagination }
+}
+</script>
+
+<style>
+/* Splitpanes pane background colors - use CSS variables for theme support */
+.splitpanes.default-theme .splitpanes__pane {
+  background-color: var(--bg-primary) !important;
+}
+
+/* Splitpanes separator customization - working with default-theme */
+.splitpanes.default-theme .splitpanes__splitter {
+  background-color: var(--border-color);
+  border-color: var(--border-secondary);
+  transition: none !important;
+}
+
+/* Make separators very subtle */
+.splitpanes--vertical.default-theme > .splitpanes__splitter {
+  width: 2px;
+  border-left: 1px solid var(--border-secondary);
+}
+
+.splitpanes--horizontal.default-theme > .splitpanes__splitter {
+  height: 2px;
+  border-top: 1px solid var(--border-secondary);
+}
+
+/* Strong hover effect */
+.splitpanes.default-theme .splitpanes__splitter:hover {
+  background-color: #3b82f6;
+  border-color: #2563eb;
+}
+
+.splitpanes.default-theme .splitpanes__splitter:hover:before,
+.splitpanes.default-theme .splitpanes__splitter:hover:after {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Active dragging state */
+.splitpanes.default-theme.splitpanes--dragging .splitpanes__splitter {
+  background-color: #2563eb;
+}
+
+/* Disable all transitions and animations for panes */
+.splitpanes.default-theme .splitpanes__pane {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Status badge styles */
+.status-badge {
+  @apply px-1.5 py-0.5 rounded text-xs font-mono font-medium min-w-[20px] text-center;
+  flex-shrink: 0;
+}
+
+.status-a {
+  @apply bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400;
+}
+
+.status-m {
+  @apply bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400;
+}
+
+.status-d {
+  @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+}
+
+.status-r {
+  @apply bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400;
+}
+
+.status-c {
+  @apply bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400;
+}
+
+.status-u {
+  @apply bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400;
+}
+
+.status-t {
+  @apply bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400;
+}
+
+.status-\? {
+  @apply bg-gray-50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-500;
+}
+</style>
