@@ -497,7 +497,7 @@ onUnmounted(() => {
 
     <!-- Control bar - two rows layout -->
     <div class="terminal-controls flex flex-col gap-2 px-4 py-3 bg-sub border-t border-main">
-      <!-- First row: PgUp, Up arrow, PgDn, A, B, C, D, 1, 2, 3, 4 -->
+      <!-- First row: PgUp, ↑, PgDn, A, B, C, D, Tab, ENTER, Go, ABC -->
       <div class="control-row flex flex-wrap items-center gap-2">
         <!-- Direction keys: PgUp, Up, PgDn -->
         <button
@@ -545,20 +545,48 @@ onUnmounted(() => {
           {{ letter }}
         </button>
 
-        <!-- Numbers 1-4 -->
+        <!-- Tab (Shift+Tab) -->
         <button
-          v-for="num in ['1', '2', '3', '4']"
-          :key="num"
-          @click="send(num)"
+          @click="send('\x1b[Z')"
           :disabled="!connected"
           class="control-btn control-btn-action"
-          :title="`Send ${num}`"
+          title="Send Shift+Tab"
         >
-          {{ num }}
+          TAB
+        </button>
+
+        <!-- ENTER -->
+        <button
+          @click="send('\r')"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          title="Send Enter key"
+        >
+          ENTER
+        </button>
+
+        <!-- Go button -->
+        <button
+          @click="send('Go')"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          title="Send 'Go'"
+        >
+          GO
+        </button>
+
+        <!-- ABC panel button (includes ESC, Ctrl+C, INPUT) -->
+        <button
+          @click="showQuickInput = true"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          title="Quick input - ESC, Ctrl+C, INPUT"
+        >
+          ABC
         </button>
       </div>
 
-      <!-- Second row: Left, Down, Right arrows, Shift+Tab, ENTER, Go, ABC, UPLOAD, LOG, CMD, TODO -->
+      <!-- Second row: ←, ↓, →, 1, 2, 3, 4, UPLOAD, LOG, CMD, TODO -->
       <div class="control-row flex flex-wrap items-center gap-2">
         <!-- Direction keys: Left, Down, Right -->
         <button
@@ -592,44 +620,16 @@ onUnmounted(() => {
           </svg>
         </button>
 
-        <!-- Shift+Tab -->
+        <!-- Numbers 1-4 -->
         <button
-          @click="send('\x1b[Z')"
+          v-for="num in ['1', '2', '3', '4']"
+          :key="num"
+          @click="send(num)"
           :disabled="!connected"
           class="control-btn control-btn-action"
-          title="Send Shift+Tab"
+          :title="`Send ${num}`"
         >
-          Tab
-        </button>
-
-        <!-- ENTER -->
-        <button
-          @click="send('\r')"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Send Enter key"
-        >
-          ENTER
-        </button>
-
-        <!-- Go button -->
-        <button
-          @click="send('Go')"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Send 'Go'"
-        >
-          Go
-        </button>
-
-        <!-- ABC panel button (includes ESC, Ctrl+C, INPUT) -->
-        <button
-          @click="showQuickInput = true"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Quick input - ESC, Ctrl+C, INPUT"
-        >
-          ABC
+          {{ num }}
         </button>
 
         <!-- UPLOAD -->
