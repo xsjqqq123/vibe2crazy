@@ -539,7 +539,7 @@ onUnmounted(() => {
           :key="letter"
           @click="send(letter)"
           :disabled="!connected"
-          class="control-btn control-btn-action"
+          class="control-btn control-btn-compact"
           :title="`Send ${letter}`"
         >
           {{ letter }}
@@ -626,7 +626,7 @@ onUnmounted(() => {
           :key="num"
           @click="send(num)"
           :disabled="!connected"
-          class="control-btn control-btn-action"
+          class="control-btn control-btn-compact"
           :title="`Send ${num}`"
         >
           {{ num }}
@@ -820,6 +820,20 @@ onUnmounted(() => {
   background-color: var(--bg-tertiary);
 }
 .control-btn-direction:active:not(:disabled) {
+  background-color: var(--border-secondary);
+}
+
+/* Compact button for single letters/numbers - same size as direction buttons */
+.control-btn-compact {
+  width: 28px;
+  height: 28px;
+  font-weight: 600;
+}
+
+.control-btn-compact:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+}
+.control-btn-compact:active:not(:disabled) {
   background-color: var(--border-secondary);
 }
 
