@@ -545,16 +545,6 @@ onUnmounted(() => {
           {{ letter }}
         </button>
 
-        <!-- Tab (Shift+Tab) -->
-        <button
-          @click="send('\x1b[Z')"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Send Shift+Tab"
-        >
-          TAB
-        </button>
-
         <!-- ENTER -->
         <button
           @click="send('\r')"
@@ -563,6 +553,16 @@ onUnmounted(() => {
           title="Send Enter key"
         >
           ENTER
+        </button>
+
+        <!-- Tab (Shift+Tab) -->
+        <button
+          @click="send('\x1b[Z')"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          title="Send Shift+Tab"
+        >
+          TAB
         </button>
 
         <!-- Go button -->
