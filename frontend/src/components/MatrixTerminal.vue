@@ -328,6 +328,14 @@ const handleClick = () => {
   emit('select', props.index)
 }
 
+// Handle right-click to deselect (when selected)
+const handleContextMenu = (event: MouseEvent) => {
+  event.preventDefault()
+  if (props.isSelected) {
+    emit('select', -1) // -1 means deselect
+  }
+}
+
 const initTerminal = () => {
   if (!terminalRef.value) return
 
@@ -527,7 +535,10 @@ onUnmounted(() => {
     @click="handleClick"
   >
     <!-- Header with badge, title, and status -->
-    <div class="terminal-header flex items-center gap-2 px-2 py-1 bg-sub border-b border-main">
+    <div
+      class="terminal-header flex items-center gap-2 px-2 py-1 bg-sub border-b border-main"
+      @contextmenu="handleContextMenu"
+    >
       <!-- Number badge (1-indexed) -->
       <span
         :class="[
