@@ -107,6 +107,15 @@ class ChangedFilesResponse(BaseModel):
     files: List[ChangedFileInfo]
 
 
+class PaginatedChangedFilesResponse(BaseModel):
+    """Paginated response for changed files endpoint"""
+    files: List[ChangedFileInfo]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class AcceptRequest(BaseModel):
     message: Optional[str] = "Accept changes"
 
