@@ -35,8 +35,6 @@ const showCommandPresets = ref(false)
 const showQuickInput = ref(false)
 const showMultiLineInput = ref(false)
 const showUploadModal = ref(false)
-const showDirectionPanel = ref(false)
-const directionPanelRef = ref<HTMLElement | null>(null)
 
 const terminalRef = ref<HTMLElement | null>(null)
 const containerRef = ref<HTMLElement | null>(null)
@@ -161,11 +159,6 @@ const sendDirection = (direction: 'up' | 'down' | 'left' | 'right') => {
     right: '\x1b[C'
   }
   send(escapeCodes[direction])
-}
-
-const sendEsc = () => {
-  if (!connected.value) return
-  send('\x1b')
 }
 
 // Scroll mode functions - just send commands to backend, no state tracking
@@ -446,26 +439,6 @@ onMounted(() => {
   })
 })
 
-// Click outside handler for direction panel
-const handleClickOutside = (event: MouseEvent) => {
-  if (directionPanelRef.value && !directionPanelRef.value.contains(event.target as Node)) {
-    showDirectionPanel.value = false
-  }
-}
-
-// Watch showDirectionPanel to add/remove click listener
-watch(showDirectionPanel, (isShown) => {
-  if (isShown) {
-    // Add click listener when panel is shown
-    setTimeout(() => {
-      document.addEventListener('click', handleClickOutside)
-    }, 0)
-  } else {
-    // Remove click listener when panel is hidden
-    document.removeEventListener('click', handleClickOutside)
-  }
-})
-
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
 
@@ -476,9 +449,6 @@ onUnmounted(() => {
       viewportElement.removeEventListener('wheel', wheelHandler, { capture: true } as EventListenerOptions)
     }
   }
-
-  // Clean up click outside listener
-  document.removeEventListener('click', handleClickOutside)
 
   disconnect()
   window.removeEventListener('resize', handleResize)
@@ -525,101 +495,108 @@ onUnmounted(() => {
       </div>
       <div ref="terminalRef" class="flex-1 overflow-hidden"></div>
 
-    <!-- Control bar -->
-    <div class="terminal-controls flex flex-wrap items-center justify-start gap-2 px-4 py-3 bg-sub border-t border-main">
-      <!-- Direction control button -->
-      <div class="relative">
+    <!-- Control bar - two rows layout -->
+    <div class="terminal-controls flex flex-col gap-2 px-4 py-3 bg-sub border-t border-main">
+      <!-- First row: PgUp, Up arrow, PgDn, A, B, C, D, 1, 2, 3, 4 -->
+      <div class="control-row flex flex-wrap items-center gap-2">
+        <!-- Direction keys: PgUp, Up, PgDn -->
         <button
-          @click="showDirectionPanel = !showDirectionPanel"
+          @click="handlePageUp"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          title="Page Up - Enter scroll mode or scroll up"
+        >
+          PgUp
+        </button>
+        <button
+          @click="sendDirection('up')"
           :disabled="!connected"
           class="control-btn control-btn-direction"
-          title="Direction keys"
+          title="Up arrow"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+        <button
+          @click="handlePageDown"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          title="Page Down - Scroll down"
+        >
+          PgDn
+        </button>
+
+        <!-- Letters A-D -->
+        <button
+          v-for="letter in ['A', 'B', 'C', 'D']"
+          :key="letter"
+          @click="send(letter)"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          :title="`Send ${letter}`"
+        >
+          {{ letter }}
+        </button>
+
+        <!-- Numbers 1-4 -->
+        <button
+          v-for="num in ['1', '2', '3', '4']"
+          :key="num"
+          @click="send(num)"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          :title="`Send ${num}`"
+        >
+          {{ num }}
+        </button>
+      </div>
+
+      <!-- Second row: Left, Down, Right arrows, Shift+Tab, ENTER, Go, ABC, UPLOAD, LOG, CMD, TODO -->
+      <div class="control-row flex flex-wrap items-center gap-2">
+        <!-- Direction keys: Left, Down, Right -->
+        <button
+          @click="sendDirection('left')"
+          :disabled="!connected"
+          class="control-btn control-btn-direction"
+          title="Left arrow"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <button
+          @click="sendDirection('down')"
+          :disabled="!connected"
+          class="control-btn control-btn-direction"
+          title="Down arrow"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <button
+          @click="sendDirection('right')"
+          :disabled="!connected"
+          class="control-btn control-btn-direction"
+          title="Right arrow"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
         </button>
 
-        <!-- Direction buttons panel -->
-        <div
-          v-if="showDirectionPanel"
-          ref="directionPanelRef"
-          class="direction-panel"
-        >
-          <div class="direction-panel-grid">
-            <div></div>
-            <button
-              @click="sendDirection('up')"
-              :disabled="!connected"
-              class="control-btn control-btn-direction"
-              title="Up"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-              </svg>
-            </button>
-            <div></div>
-            <button
-              @click="sendDirection('left')"
-              :disabled="!connected"
-              class="control-btn control-btn-direction"
-              title="Left"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              @click="sendDirection('down')"
-              :disabled="!connected"
-              class="control-btn control-btn-direction"
-              title="Down"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            <button
-              @click="sendDirection('right')"
-              :disabled="!connected"
-              class="control-btn control-btn-direction"
-              title="Right"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-          <!-- Page Up/Down buttons -->
-          <div class="direction-page-buttons">
-            <button
-              @click="handlePageUp"
-              :disabled="!connected"
-              class="control-btn control-btn-page"
-              title="Page Up - Enter scroll mode or scroll up"
-            >
-              PgUp
-            </button>
-            <button
-              @click="handlePageDown"
-              :disabled="!connected"
-              class="control-btn control-btn-page"
-              title="Page Down - Scroll down"
-            >
-              PgDn
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <button
-          @click="sendEsc"
+        <!-- Shift+Tab -->
+        <button
+          @click="send('\x1b[Z')"
           :disabled="!connected"
           class="control-btn control-btn-action"
-          title="Send Esc key"
+          title="Send Shift+Tab"
         >
-          ESC
+          Tab
         </button>
+
+        <!-- ENTER -->
         <button
           @click="send('\r')"
           :disabled="!connected"
@@ -628,22 +605,38 @@ onUnmounted(() => {
         >
           ENTER
         </button>
+
+        <!-- Go button -->
+        <button
+          @click="send('Go')"
+          :disabled="!connected"
+          class="control-btn control-btn-action"
+          title="Send 'Go'"
+        >
+          Go
+        </button>
+
+        <!-- ABC panel button (includes ESC, Ctrl+C, INPUT) -->
         <button
           @click="showQuickInput = true"
           :disabled="!connected"
           class="control-btn control-btn-action"
-          title="Quick input"
+          title="Quick input - ESC, Ctrl+C, INPUT"
         >
           ABC
         </button>
+
+        <!-- UPLOAD -->
         <button
-          @click="showMultiLineInput = true"
+          @click="showUploadModal = true"
           :disabled="!connected"
           class="control-btn control-btn-action"
-          title="Multi-line input"
+          title="Upload files to temp directory"
         >
-          INPUT
+          UPLOAD
         </button>
+
+        <!-- LOG -->
         <button
           @click="handleViewHistory"
           :disabled="loadingHistory || !connected"
@@ -653,6 +646,8 @@ onUnmounted(() => {
           <span v-if="loadingHistory" class="spinner-small"></span>
           <span v-else>LOG</span>
         </button>
+
+        <!-- CMD -->
         <button
           @click="showCommandPresets = true"
           :disabled="!connected"
@@ -661,6 +656,8 @@ onUnmounted(() => {
         >
           CMD
         </button>
+
+        <!-- TODO -->
         <button
           @click="showQueueModal = true"
           :disabled="!connected"
@@ -669,14 +666,7 @@ onUnmounted(() => {
         >
           TODO
         </button>
-        <button
-          @click="showUploadModal = true"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Upload files to temp directory"
-        >
-          UPLOAD
-        </button>
+      </div>
     </div>
     </div>
 
@@ -711,6 +701,7 @@ onUnmounted(() => {
       :connected="connected"
       @close="showQuickInput = false"
       @send="handleQuickInputSend"
+      @open-input="showQuickInput = false; showMultiLineInput = true"
     />
     <MultiLineInputModal
       v-if="showMultiLineInput"
@@ -864,50 +855,8 @@ onUnmounted(() => {
   }
 }
 
-/* Direction panel styles */
-.direction-panel {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  margin-bottom: 8px;
-  background-color: var(--bg-primary);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  padding: 8px;
-  z-index: 50;
-}
-
-.direction-panel-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-}
-
-.direction-panel-grid > div {
-  width: 28px;
-  height: 28px;
-}
-
-/* Page Up/Down buttons in direction panel */
-.direction-page-buttons {
-  display: flex;
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(128, 128, 128, 0.3);
-}
-
-.control-btn-page {
-  flex: 1;
-  height: 28px;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.control-btn-page:hover:not(:disabled) {
-  background-color: var(--bg-tertiary);
-}
-.control-btn-page:active:not(:disabled) {
-  background-color: var(--border-secondary);
+/* Control row styles */
+.control-row {
+  flex-wrap: wrap;
 }
 </style>
