@@ -420,13 +420,15 @@ async def delete_file(
     return {"success": True}
 
 
-@router.get("/{task_id}/changed-files", response_model=ChangedFilesResponse)
+@router.get("/{task_id}/changed-files", response_model=PaginatedChangedFilesResponse)
 async def get_changed_files(
     task_id: str,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
     db: DBSession = Depends(get_db),
     current_user: Task = Depends(require_auth)
 ):
-    """Get list of changed files in task with Git status"""
+    """Get paginated list of changed files in task with Git status"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(
@@ -434,9 +436,21 @@ async def get_changed_files(
             detail="Task not found"
         )
 
-    files = GitService.get_changed_files_with_status(task.worktree_path)
+    all_files = GitService.get_changed_files_with_status(task.worktree_path)
 
-    return {"files": files}
+    # Calculate pagination
+    total = len(all_files)
+    offset = (page - 1) * page_size
+    paginated_files = all_files[offset:offset + page_size]
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+    return PaginatedChangedFilesResponse(
+        files=paginated_files,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages
+    )
 
 
 @router.get("/{task_id}/diff/{file_path:path}")
