@@ -8,6 +8,7 @@ import filesApi from '@/api/files'
 import tasksApi from '@/api/tasks'
 import { gitApi, type CommitInfo, type CommitDiff, type PaginatedCommitsResponse } from '@/api/git'
 import { type ChangedFileInfo, type PaginatedChangedFilesResponse } from '@/api/files'
+import { isLanMode } from '@/api/client'
 import FileCacheService from '@/services/FileCacheService'
 import { Splitpanes, Pane } from 'splitpanes'
 import { useFileTree, provideFileTree } from '@/composables/useFileTree'
@@ -1630,6 +1631,7 @@ let refreshTimer: number | null = null
 
 const startRefresh = () => {
   refreshTimer = window.setInterval(() => {
+    if (!isLanMode()) return  // 非局域网跳过本次刷新
     loadChangedFiles()
     loadButtonStates()  // Real-time check for button states
     refreshStatus()      // Update status display
