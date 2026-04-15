@@ -24,19 +24,10 @@ setup_logging()
 
 
 # Rate limiter setup using fastapi-limiter with pyrate-limiter
-from pyrate_limiter import Limiter, Rate, Duration
-from pyrate_limiter.clocks import MonotonicClock
-from fastapi_limiter.depends import RateLimiter
-from fastapi_limiter.identifier import default_identifier
-from fastapi_limiter.callback import default_callback
+from app.rate_limiters import auth_rate_limiter, default_rate_limiter
 
-# Create limiter with in-memory storage (default)
-auth_limiter = Limiter(Rate(5, Duration.MINUTE))  # 5 requests per minute
-default_limiter = Limiter(Rate(100, Duration.MINUTE))  # 100 requests per minute
-
-# Create RateLimiter instances for dependency injection
-auth_rate_limiter = RateLimiter(limiter=auth_limiter, identifier=default_identifier, callback=default_callback)
-default_rate_limiter = RateLimiter(limiter=default_limiter, identifier=default_identifier, callback=default_callback)
+# Re-export for other modules
+__all__ = ['auth_rate_limiter', 'default_rate_limiter']
 
 
 def get_frontend_path() -> Path | None:
