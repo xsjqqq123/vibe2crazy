@@ -117,6 +117,35 @@ const mergeExecutionLog = ref<any[] | null>(null)  // Store execution log for er
 // Accept
 const accepting = ref(false)
 const acceptError = ref('')
+const createError = ref('')
+const showCreateDialog = ref(false)
+const newTaskName = ref('')
+const newTaskDirectOnBranch = ref(false)
+
+const createTask = async () => {
+  if (!newTaskName.value.trim()) {
+    createError.value = 'Please enter a task name'
+    return
+  }
+  const originalLoading = loading.value
+  loading.value = true
+  createError.value = ''
+  try {
+    const created = await tasksApi.create(projectId.value, {
+      name: newTaskName.value,
+      direct_on_branch: newTaskDirectOnBranch.value
+    })
+    tasks.value.unshift(created)
+    showCreateDialog.value = false
+    newTaskName.value = ''
+    newTaskDirectOnBranch.value = false
+    await switchTask(created.id)
+  } catch (err: any) {
+    createError.value = err.message || 'Failed to create task'
+  }
+  loading.value = originalLoading
+}
+
 const acceptSuccess = ref(false)
 const buttonStates = ref<ButtonStates>({
   can_accept: false,
@@ -444,10 +473,8 @@ const handleSidebarResize = (event: LayoutEvent) => {
   console.log('[Layout Debug] handleSidebarResize called', event)
   // event.panes is the array of pane objects
   const panes = (event as any).panes
-  if (panes && panes.length >= 3) {
-    layout.value.changedFiles = Math.round(panes[0].size)
+  if (panes && panes.length >= 2) {
     layout.value.files = Math.round(panes[1].size)
-    layout.value.commits = Math.round(panes[2].size)
     console.log('[Layout Debug] Updated layout', layout.value)
   }
 }
@@ -1875,110 +1902,155 @@ onUnmounted(() => {
             </div>
           </pane>
 
-          <!-- Changed files -->
-          <pane :size="layout.files" :min-size="10" class="flex flex-col min-h-0 bg-main border-r border-main">
-            <div class="changed-files-list flex-[1] p-4 border-b border-main overflow-y-auto min-h-0">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-main">Changes</h3>
-                <button
-                  @click="openCommitMessageModal"
-                  :disabled="accepting"
-                  :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
-                  title="Accept"
-                >
-                  <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                </button>
-              </div>
-              <div v-if="initialLoading" class="flex items-center justify-center py-4">
-                <div class="spinner"></div>
-              </div>
-              <div v-else-if="changedFiles.length === 0" class="text-xs text-sub py-2">
-                No changes detected
-              </div>
-              <div v-else class="space-y-1" @click="closeContextMenuOnClick">
-                <div
-                  v-for="file in changedFiles"
-                  :key="file.path"
-                  @click="loadFile(file.path, 'diff')"
-                  @contextmenu.prevent.stop="(e) => handleShowContextMenu({
-                    x: e.clientX,
-                    y: e.clientY,
-                    path: file.path,
-                    type: 'file',
-                    source: 'changedFiles'
-                  })"
-                  @touchstart="(e) => handleChangedFilesTouchStart(e, file.path)"
-                  @touchend="handleChangedFilesTouchEnd"
-                  @touchmove="handleChangedFilesTouchMove"
-                  :class="['text-xs px-2 py-1 rounded cursor-pointer hover:bg-sub flex items-center justify-between gap-2', currentFile === file.path && editorMode === 'diff' ? 'item-selected' : '']"
-                  :title="file.path"
-                >
-                  <span :class="['truncate flex-1', currentFile === file.path && editorMode === 'diff' ? 'text-main font-medium' : 'text-green-600 dark:text-green-400']">{{ file.path }}</span>
-                  <span class="px-1.5 py-0.5 rounded text-xs font-mono font-medium min-w-[20px] text-center flex-shrink-0"
-                    :class="{
-                      'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': file.status === 'A',
-                      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': file.status === 'M',
-                      'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': file.status === 'D',
-                      'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': file.status === 'R',
-                      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400': file.status === 'C',
-                      'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400': file.status === 'U',
-                      'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400': file.status === 'T',
-                      'bg-gray-50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-500': file.status === '?'
-                    }">{{ file.status }}</span>
-                </div>
-              </div>
-              <!-- Pagination - only show when total > 20 -->
-              <Pagination
-                v-if="changedFilesData && changedFilesData.total > 20"
-                :total="changedFilesData.total"
-                :page="changedFilesData.page"
-                :page-size="changedFilesData.page_size"
-                :total-pages="changedFilesData.total_pages"
-                @page-change="handleChangedFilesPageChange"
-              />
+          <!-- Changes / Commits tabbed pane -->
+          <pane :size="layout.files + layout.commits" :min-size="15" class="flex flex-col min-h-0 bg-main border-r border-main">
+            <!-- Tab bar -->
+            <div class="flex border-b border-main shrink-0">
+              <button
+                @click="activeTab = 'changes'"
+                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors', activeTab === 'changes' ? 'text-main border-b-2 border-blue-600 dark:border-blue-400' : 'text-sub hover:text-main']"
+              >
+                Changes ({{ changedFiles.length }})
+              </button>
+              <button
+                @click="activeTab = 'commits'"
+                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors', activeTab === 'commits' ? 'text-main border-b-2 border-blue-600 dark:border-blue-400' : 'text-sub hover:text-main']"
+              >
+                Commits
+              </button>
             </div>
-          </pane>
 
-          <!-- Commits -->
-          <pane :size="layout.commits" :min-size="5" class="flex flex-col min-h-0 bg-main border-r border-main">
-            <div class="flex-[1] p-4 border-t border-main overflow-y-auto min-h-0">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-main">Commits</h3>
-                <div class="flex gap-1">
+            <!-- Tab content -->
+            <div class="flex-1 overflow-y-auto min-h-0">
+              <!-- Changes tab -->
+              <div v-if="activeTab === 'changes'" class="changed-files-list p-4 min-h-full">
+                <div class="flex items-center justify-between mb-2">
+                  <h3 class="text-sm font-semibold text-main">Changes</h3>
                   <button
-                    v-if="!task?.direct_on_branch"
-                    @click="mergeTask"
-                    :disabled="syncing"
-                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
-                    title="Merge"
+                    @click="openCommitMessageModal"
+                    :disabled="accepting"
+                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
+                    title="Accept"
                   >
-                    <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                     </svg>
                   </button>
                 </div>
+                <div v-if="initialLoading" class="flex items-center justify-center py-4">
+                  <div class="spinner"></div>
+                </div>
+                <div v-else-if="changedFiles.length === 0" class="text-xs text-sub py-2">
+                  No changes detected
+                </div>
+                <div v-else class="space-y-1" @click="closeContextMenuOnClick">
+                  <div
+                    v-for="file in changedFiles"
+                    :key="file.path"
+                    @click="loadFile(file.path, 'diff')"
+                    @contextmenu.prevent.stop="(e) => handleShowContextMenu({ x: e.clientX, y: e.clientY, path: file.path, type: 'file', source: 'changedFiles' })"
+                    @touchstart="(e) => handleChangedFilesTouchStart(e, file.path)"
+                    @touchend="handleChangedFilesTouchEnd"
+                    @touchmove="handleChangedFilesTouchMove"
+                    :class="['text-xs px-2 py-1 rounded cursor-pointer hover:bg-sub flex items-center justify-between gap-2', currentFile === file.path && editorMode === 'diff' ? 'item-selected' : '']"
+                    :title="file.path"
+                  >
+                    <span :class="['truncate flex-1', currentFile === file.path && editorMode === 'diff' ? 'text-main font-medium' : 'text-green-600 dark:text-green-400']">{{ file.path }}</span>
+                    <span class="px-1.5 py-0.5 rounded text-xs font-mono font-medium min-w-[20px] text-center flex-shrink-0"
+                      :class="{
+                        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': file.status === 'A',
+                        'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': file.status === 'M',
+                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': file.status === 'D',
+                        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': file.status === 'R',
+                        'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400': file.status === 'C',
+                        'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400': file.status === 'U',
+                        'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400': file.status === 'T',
+                        'bg-gray-50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-500': file.status === '?'
+                      }">{{ file.status }}</span>
+                  </div>
+                </div>
+                <Pagination
+                  v-if="changedFilesData && changedFilesData.total > 20"
+                  :total="changedFilesData.total"
+                  :page="changedFilesData.page"
+                  :page-size="changedFilesData.page_size"
+                  :total-pages="changedFilesData.total_pages"
+                  @page-change="handleChangedFilesPageChange"
+                />
               </div>
-              <CommitsList
-                :commits="commits"
-                :loading="loadingCommits"
-                :error="commitsError"
-                :lastMergeCommitHash="task?.last_merge_commit_hash"
-                :newCommitHashes="newCommitHashes"
-                @select="loadCommitDiff"
-                @showContextMenu="handleCommitContextMenu"
-              />
-              <Pagination
-                v-if="commitsData"
-                :total="commitsData.total"
-                :page="commitsData.page"
-                :page-size="commitsData.page_size"
-                :total-pages="commitsData.total_pages"
-                @page-change="handlePageChange"
-              />
+
+              <!-- Commits tab -->
+              <div v-else class="flex-[1] p-4 min-h-full">
+                <div class="flex items-center justify-between mb-2">
+                  <h3 class="text-sm font-semibold text-main">Commits</h3>
+                  <div class="flex gap-1">
+                    <button
+                      v-if="!task?.direct_on_branch"
+                      @click="mergeTask"
+                      :disabled="syncing"
+                      :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
+                      title="Merge"
+                    >
+                      <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <CommitsList
+                  :commits="commits"
+                  :loading="loadingCommits"
+                  :error="commitsError"
+                  :lastMergeCommitHash="task?.last_merge_commit_hash"
+                  :newCommitHashes="newCommitHashes"
+                  @select="loadCommitDiff"
+                  @showContextMenu="handleCommitContextMenu"
+                />
+                <Pagination
+                  v-if="commitsData"
+                  :total="commitsData.total"
+                  :page="commitsData.page"
+                  :page-size="commitsData.page_size"
+                  :total-pages="commitsData.total_pages"
+                  @page-change="handlePageChange"
+                />
+              </div>
+            </div>
+          </pane>
+
+          <!-- Task List pane -->
+          <pane :size="25" :min-size="10" class="flex flex-col min-h-0 bg-main border-r border-main">
+            <div class="p-4 flex-1 overflow-y-auto min-h-0">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-main">Tasks</h3>
+                <button @click="showCreateDialog = true" class="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500">+ New</button>
+              </div>
+
+              <div v-if="tasksLoading" class="flex items-center justify-center py-4">
+                <div class="spinner"></div>
+              </div>
+              <div v-else-if="tasks.length === 0" class="text-xs text-sub py-2 text-center">
+                No tasks
+              </div>
+              <div v-else class="space-y-1">
+                <div
+                  v-for="task in tasks"
+                  :key="task.id"
+                  @click="switchTask(task.id)"
+                  :class="[
+                    'px-2 py-1.5 rounded cursor-pointer text-sm flex items-center gap-2',
+                    task.id === taskId ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium' : 'hover:bg-sub text-sub'
+                  ]"
+                >
+                  <span class="truncate flex-1">{{ task.name }}</span>
+                  <span v-if="task.direct_on_branch" class="px-1 py-0.5 text-xs rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 shrink-0">Direct</span>
+                  <span v-else :class="task.task_status === 'running' ? 'text-green-600 dark:text-green-400' : 'text-gray-400'">
+                    {{ task.task_status === 'running' ? '🟢' : '⚪' }}
+                  </span>
+                </div>
+              </div>
             </div>
           </pane>
         </splitpanes>
@@ -2562,6 +2634,34 @@ onUnmounted(() => {
             Accept
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Create task dialog -->
+    <div v-if="showCreateDialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-md w-full">
+        <h3 class="text-lg font-semibold text-main mb-4">Create New Task</h3>
+        <form @submit.prevent="createTask" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-sub mb-2">Task Name *</label>
+            <input v-model="newTaskName" type="text" class="input w-full" placeholder="Implement feature X" />
+          </div>
+          <div class="flex items-start gap-2">
+            <input type="checkbox" id="newTaskDirect" v-model="newTaskDirectOnBranch" class="mt-1" />
+            <label for="newTaskDirect" class="text-sm text-sub">
+              <span class="font-medium text-main">Directly on the branch</span>
+              <br />
+              <span class="text-xs">Work directly on main branch, no worktree created.</span>
+            </label>
+          </div>
+          <div v-if="createError" class="text-red-600 dark:text-red-400 text-sm">{{ createError }}</div>
+          <div class="flex gap-3 justify-end">
+            <button type="button" @click="showCreateDialog = false; newTaskDirectOnBranch = false" class="btn btn-secondary">Cancel</button>
+            <button type="submit" :disabled="loading" class="btn btn-primary">
+              <span v-if="loading" class="spinner mr-2"></span>Create
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
