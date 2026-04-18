@@ -1845,8 +1845,8 @@ onUnmounted(() => {
     </header>
 
     <!-- Direct on branch notice -->
-    <div v-if="task?.direct_on_branch" class="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-2">
-      <div class="max-w-full mx-auto flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+    <div v-if="task?.direct_on_branch" class="banner-direct px-4 py-2">
+      <div class="max-w-full mx-auto flex items-center gap-2 text-sm">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
@@ -1895,13 +1895,13 @@ onUnmounted(() => {
             <div class="flex border-b border-main shrink-0">
               <button
                 @click="activeTab = 'changes'"
-                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors', activeTab === 'changes' ? 'text-main border-b-2 border-blue-600 dark:border-blue-400' : 'text-sub hover:text-main']"
+                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors border-b-2', activeTab === 'changes' ? 'tab-active' : 'border-transparent text-sub hover:text-main']"
               >
                 Changes ({{ changedFiles.length }})
               </button>
               <button
                 @click="activeTab = 'commits'"
-                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors', activeTab === 'commits' ? 'text-main border-b-2 border-blue-600 dark:border-blue-400' : 'text-sub hover:text-main']"
+                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors border-b-2', activeTab === 'commits' ? 'tab-active' : 'border-transparent text-sub hover:text-main']"
               >
                 Commits
               </button>
@@ -2028,11 +2028,11 @@ onUnmounted(() => {
                   @click="switchTask(task.id)"
                   :class="[
                     'px-2 py-1.5 rounded cursor-pointer text-sm flex items-center gap-2',
-                    task.id === taskId ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium' : 'hover:bg-sub text-sub'
+                    task.id === taskId ? 'task-item-selected' : 'hover:bg-sub text-sub'
                   ]"
                 >
                   <span class="truncate flex-1">{{ task.name }}</span>
-                  <span v-if="task.direct_on_branch" class="px-1 py-0.5 text-xs rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 shrink-0">Direct</span>
+                  <span v-if="task.direct_on_branch" class="badge-direct px-1 py-0.5 text-xs rounded shrink-0">Direct</span>
                   <span :class="task.task_status === 'running' ? 'text-green-600 dark:text-green-400' : 'text-gray-400'">
                     {{ task.task_status === 'running' ? '🟢' : '⚪' }}
                   </span>
