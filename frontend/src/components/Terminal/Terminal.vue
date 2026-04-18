@@ -532,8 +532,8 @@ onUnmounted(() => {
 
     <!-- Control bar - 3 rows -->
     <div class="terminal-controls flex flex-col bg-sub border-t border-main">
-      <!-- Row 1: navigation + letter keys -->
-      <div class="grid" style="grid-template-columns: repeat(7, 28px) repeat(2, 1fr);">
+      <!-- Row 1: navigation + letter keys + ENTER -->
+      <div class="grid" style="grid-template-columns: repeat(7, 28px) 1fr;">
         <button @click="handlePageUp" :disabled="!connected" class="control-btn" title="Page Up">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7-7 7 7" />
@@ -553,10 +553,9 @@ onUnmounted(() => {
         </button>
         <button v-for="letter in ['A', 'B', 'C', 'D']" :key="letter" @click="sendCommandWithDelay(letter)" :disabled="!connected" class="control-btn" :title="`Send ${letter}`">{{ letter }}</button>
         <button @click="send('\r')" :disabled="!connected" class="control-btn" title="Send Enter key">ENTER</button>
-        <button @click="send('\x1b[Z')" :disabled="!connected" class="control-btn" title="Send Shift+Tab">TAB</button>
       </div>
-      <!-- Row 2: arrow keys + numbers + GO + TODO -->
-      <div class="grid" style="grid-template-columns: repeat(7, 28px) repeat(2, 1fr);">
+      <!-- Row 2: arrow keys + numbers + GO -->
+      <div class="grid" style="grid-template-columns: repeat(3, 28px) repeat(4, 28px) 1fr;">
         <button @click="sendDirection('left')" :disabled="!connected" class="control-btn" title="Left arrow">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -574,17 +573,15 @@ onUnmounted(() => {
         </button>
         <button v-for="num in ['1', '2', '3', '4']" :key="num" @click="sendCommandWithDelay(num)" :disabled="!connected" class="control-btn" :title="`Send ${num}`">{{ num }}</button>
         <button @click="sendCommandWithDelay('Go')" :disabled="!connected" class="control-btn" title="Send 'Go'">GO</button>
-        <button @click="showQueueModal = true" :disabled="!connected" class="control-btn" title="Manage message queue">TODO</button>
       </div>
-      <!-- Row 3: UPLOAD + LOG + CMD + ABC (evenly distributed) -->
+      <!-- Row 3: TAB + UPLOAD + CMD + ABC + TODO (evenly distributed) -->
       <div class="flex justify-evenly">
+        <button @click="send('\x1b[Z')" :disabled="!connected" class="control-btn" title="Send Shift+Tab">TAB</button>
         <button @click="showUploadModal = true" :disabled="!connected" class="control-btn" title="Upload files to temp directory">UPLOAD</button>
-        <button @click="handleViewHistory" :disabled="loadingHistory || !connected" class="control-btn" title="View terminal history">
-          <span v-if="loadingHistory" class="spinner-small"></span>
-          <span v-else>LOG</span>
-        </button>
         <button @click="showCommandPresets = true" :disabled="!connected" class="control-btn" title="Command presets">CMD</button>
         <button @click="showQuickInput = true" :disabled="!connected" class="control-btn" title="Quick input - ESC, Ctrl+C, INPUT">ABC</button>
+        <button @click="showQueueModal = true" :disabled="!connected" class="control-btn" title="Manage message queue">TODO</button>
+      </div>
       </div>
     </div>
     </div>
