@@ -529,6 +529,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div ref="terminalRef" class="flex-1 overflow-hidden"></div>
+    </div>
 
     <!-- Control bar - 3 rows -->
     <div class="terminal-controls flex flex-col bg-sub border-t border-main">
@@ -552,7 +553,7 @@ onUnmounted(() => {
           </svg>
         </button>
         <button v-for="letter in ['A', 'B', 'C', 'D']" :key="letter" @click="sendCommandWithDelay(letter)" :disabled="!connected" class="control-btn" :title="`Send ${letter}`">{{ letter }}</button>
-        <button @click="send('\r')" :disabled="!connected" class="control-btn" title="Send Enter key">ENTER</button>
+        <button @click="showUploadModal = true" :disabled="!connected" class="control-btn" title="Upload files to temp directory">UPLOAD</button>
       </div>
       <!-- Row 2: arrow keys + numbers + GO -->
       <div class="grid" style="grid-template-columns: repeat(3, 28px) repeat(4, 28px) 1fr;">
@@ -577,13 +578,11 @@ onUnmounted(() => {
       <!-- Row 3: TAB + UPLOAD + CMD + ABC + TODO (evenly distributed) -->
       <div class="flex justify-evenly">
         <button @click="send('\x1b[Z')" :disabled="!connected" class="control-btn" title="Send Shift+Tab">TAB</button>
-        <button @click="showUploadModal = true" :disabled="!connected" class="control-btn" title="Upload files to temp directory">UPLOAD</button>
+        <button @click="send('\r')" :disabled="!connected" class="control-btn" title="Send Enter key">ENTER</button>
         <button @click="showCommandPresets = true" :disabled="!connected" class="control-btn" title="Command presets">CMD</button>
         <button @click="showQuickInput = true" :disabled="!connected" class="control-btn" title="Quick input - ESC, Ctrl+C, INPUT">ABC</button>
         <button @click="showQueueModal = true" :disabled="!connected" class="control-btn" title="Manage message queue">TODO</button>
       </div>
-      </div>
-    </div>
     </div>
 
     <!-- History viewer -->
