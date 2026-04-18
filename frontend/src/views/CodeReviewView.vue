@@ -121,14 +121,14 @@ const createError = ref('')
 const showCreateDialog = ref(false)
 const newTaskName = ref('')
 const newTaskDirectOnBranch = ref(false)
+const creatingTask = ref(false)
 
 const createTask = async () => {
   if (!newTaskName.value.trim()) {
     createError.value = 'Please enter a task name'
     return
   }
-  const originalLoading = loading.value
-  loading.value = true
+  creatingTask.value = true
   createError.value = ''
   try {
     const created = await tasksApi.create(projectId.value, {
@@ -143,7 +143,7 @@ const createTask = async () => {
   } catch (err: any) {
     createError.value = err.message || 'Failed to create task'
   }
-  loading.value = originalLoading
+  creatingTask.value = false
 }
 
 const acceptSuccess = ref(false)
@@ -2657,8 +2657,8 @@ onUnmounted(() => {
           <div v-if="createError" class="text-red-600 dark:text-red-400 text-sm">{{ createError }}</div>
           <div class="flex gap-3 justify-end">
             <button type="button" @click="showCreateDialog = false; newTaskDirectOnBranch = false" class="btn btn-secondary">Cancel</button>
-            <button type="submit" :disabled="loading" class="btn btn-primary">
-              <span v-if="loading" class="spinner mr-2"></span>Create
+            <button type="submit" :disabled="creatingTask" class="btn btn-primary">
+              <span v-if="creatingTask" class="spinner mr-2"></span>Create
             </button>
           </div>
         </form>
