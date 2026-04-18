@@ -534,7 +534,7 @@ onUnmounted(() => {
     <!-- Control bar - 3 rows -->
     <div class="terminal-controls flex flex-col bg-sub border-t border-main">
       <!-- Row 1: navigation + letter keys + ENTER -->
-      <div class="grid" style="grid-template-columns: repeat(7, 28px) 1fr;">
+      <div class="grid" style="grid-template-columns: repeat(8, 1fr);">
         <button @click="handlePageUp" :disabled="!connected" class="control-btn" title="Page Up">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7-7 7 7" />
@@ -556,7 +556,7 @@ onUnmounted(() => {
         <button @click="showUploadModal = true" :disabled="!connected" class="control-btn" title="Upload files to temp directory">UPLOAD</button>
       </div>
       <!-- Row 2: arrow keys + numbers + GO -->
-      <div class="grid" style="grid-template-columns: repeat(3, 28px) repeat(4, 28px) 1fr;">
+      <div class="grid" style="grid-template-columns: repeat(8, 1fr);">
         <button @click="sendDirection('left')" :disabled="!connected" class="control-btn" title="Left arrow">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
