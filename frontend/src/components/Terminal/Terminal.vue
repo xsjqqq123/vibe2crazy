@@ -347,6 +347,7 @@ const initTerminal = () => {
   xterm.value.writeln('\x1b[33mWaiting for network detection...\x1b[0m')
   delayedConnect(3000, (data: string) => {
     xterm.value?.write(data)
+    checkApiError()
   })
 
   // Watch connection status
@@ -356,9 +357,8 @@ const initTerminal = () => {
       // Clear terminal and send reset command to clean up any artifacts
       xterm.value?.clear()
       send('\x1bc') // Reset terminal (RIS - Reset to Initial State)
-      setTimeout(() => {
-        xterm.value?.writeln('\x1b[32m✓ Connected to terminal\x1b[0m')
-      }, 100)
+      // Reset API error watcher state on reconnect
+      if (apiErrorTimer) { clearTimeout(apiErrorTimer); apiErrorTimer = null }
     }
   })
 
@@ -398,7 +398,41 @@ const handleResize = () => {
   })
 }
 
-onMounted(() => {
+  // API Error auto-continue watcher
+  let apiErrorTimer: ReturnType<typeof setTimeout> | null = null
+
+  const checkApiError = () => {
+    if (!xterm.value) return
+    const buffer = xterm.value.buffer.active
+    const visibleLines: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      visibleLines.push(buffer.getLine(i)?.translateToString(true) ?? '')
+    }
+    const text = visibleLines.join(' ')
+    const hasApiError = text.includes('API Error:')
+
+    if (hasApiError && !apiErrorTimer) {
+      apiErrorTimer = setTimeout(() => {
+        apiErrorTimer = null
+        // Re-check after 20s
+        if (!xterm.value) return
+        const buf = xterm.value.buffer.active
+        const lines: string[] = []
+        for (let i = 0; i < buf.length; i++) {
+          lines.push(buf.getLine(i)?.translateToString(true) ?? '')
+        }
+        if (lines.join(' ').includes('API Error:')) {
+          send('continue')
+          setTimeout(() => send('\r'), 500)
+        }
+      }, 20000)
+    } else if (!hasApiError && apiErrorTimer) {
+      clearTimeout(apiErrorTimer)
+      apiErrorTimer = null
+    }
+  }
+
+  onMounted(() => {
   initTerminal()
   window.addEventListener('resize', handleResize)
 
@@ -441,6 +475,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
+  if (apiErrorTimer) clearTimeout(apiErrorTimer)
 
   // Clean up wheel event listener
   if (wheelHandler && terminalRef.value) {
@@ -489,190 +524,62 @@ onUnmounted(() => {
               connectionType === 'lan' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
             ]"
           >
-            {{ connectionType === 'lan' ? 'LAN' : '公网' }}
+            {{ connectionType === 'lan' ? 'LAN' : 'WAN' }}
           </span>
         </div>
       </div>
       <div ref="terminalRef" class="flex-1 overflow-hidden"></div>
 
-    <!-- Control bar - two rows layout -->
-    <div class="terminal-controls flex flex-col gap-2 px-4 py-3 bg-sub border-t border-main">
-      <!-- First row: PgUp, ↑, PgDn, A, B, C, D, Tab, ENTER, Go, ABC -->
-      <div class="control-row flex flex-wrap items-center gap-2">
-        <!-- Direction keys: PgUp, Up, PgDn -->
-        <button
-          @click="handlePageUp"
-          :disabled="!connected"
-          class="control-btn control-btn-direction"
-          title="Page Up - Enter scroll mode or scroll up"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 9l7-7 7 7" />
-          </svg>
-        </button>
-        <button
-          @click="sendDirection('up')"
-          :disabled="!connected"
-          class="control-btn control-btn-direction"
-          title="Up arrow"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-          </svg>
-        </button>
-        <button
-          @click="handlePageDown"
-          :disabled="!connected"
-          class="control-btn control-btn-direction"
-          title="Page Down - Scroll down"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 15l-7 7-7-7" />
-          </svg>
-        </button>
+    <!-- Control bar - grid layout -->
+    <div class="terminal-controls grid bg-sub border-t border-main" style="grid-template-columns: repeat(3, 28px) repeat(4, 28px) repeat(4, 1fr); grid-template-rows: repeat(2, 28px);">
+      <!-- First row -->
+      <button @click="handlePageUp" :disabled="!connected" class="control-btn" title="Page Up">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7-7 7 7" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19l7-7 7 7" />
+        </svg>
+      </button>
+      <button @click="sendDirection('up')" :disabled="!connected" class="control-btn" title="Up arrow">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+      <button @click="handlePageDown" :disabled="!connected" class="control-btn" title="Page Down">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5l7 7 7-7" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7 7 7-7" />
+        </svg>
+      </button>
+      <button v-for="letter in ['A', 'B', 'C', 'D']" :key="letter" @click="sendCommandWithDelay(letter)" :disabled="!connected" class="control-btn" :title="`Send ${letter}`">{{ letter }}</button>
+      <button @click="send('\r')" :disabled="!connected" class="control-btn" title="Send Enter key">ENTER</button>
+      <button @click="send('\x1b[Z')" :disabled="!connected" class="control-btn" title="Send Shift+Tab">TAB</button>
+      <button @click="sendCommandWithDelay('Go')" :disabled="!connected" class="control-btn" title="Send 'Go'">GO</button>
+      <button @click="showQuickInput = true" :disabled="!connected" class="control-btn" title="Quick input - ESC, Ctrl+C, INPUT">ABC</button>
 
-        <!-- Letters A-D -->
-        <button
-          v-for="letter in ['A', 'B', 'C', 'D']"
-          :key="letter"
-          @click="send(letter)"
-          :disabled="!connected"
-          class="control-btn control-btn-compact"
-          :title="`Send ${letter}`"
-        >
-          {{ letter }}
-        </button>
-
-        <!-- ENTER -->
-        <button
-          @click="send('\r')"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Send Enter key"
-        >
-          ENTER
-        </button>
-
-        <!-- Tab (Shift+Tab) -->
-        <button
-          @click="send('\x1b[Z')"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Send Shift+Tab"
-        >
-          TAB
-        </button>
-
-        <!-- Go button -->
-        <button
-          @click="send('Go')"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Send 'Go'"
-        >
-          GO
-        </button>
-
-        <!-- ABC panel button (includes ESC, Ctrl+C, INPUT) -->
-        <button
-          @click="showQuickInput = true"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Quick input - ESC, Ctrl+C, INPUT"
-        >
-          ABC
-        </button>
-      </div>
-
-      <!-- Second row: ←, ↓, →, 1, 2, 3, 4, UPLOAD, LOG, CMD, TODO -->
-      <div class="control-row flex flex-wrap items-center gap-2">
-        <!-- Direction keys: Left, Down, Right -->
-        <button
-          @click="sendDirection('left')"
-          :disabled="!connected"
-          class="control-btn control-btn-direction"
-          title="Left arrow"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <button
-          @click="sendDirection('down')"
-          :disabled="!connected"
-          class="control-btn control-btn-direction"
-          title="Down arrow"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        <button
-          @click="sendDirection('right')"
-          :disabled="!connected"
-          class="control-btn control-btn-direction"
-          title="Right arrow"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        <!-- Numbers 1-4 -->
-        <button
-          v-for="num in ['1', '2', '3', '4']"
-          :key="num"
-          @click="send(num)"
-          :disabled="!connected"
-          class="control-btn control-btn-compact"
-          :title="`Send ${num}`"
-        >
-          {{ num }}
-        </button>
-
-        <!-- UPLOAD -->
-        <button
-          @click="showUploadModal = true"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Upload files to temp directory"
-        >
-          UPLOAD
-        </button>
-
-        <!-- LOG -->
-        <button
-          @click="handleViewHistory"
-          :disabled="loadingHistory || !connected"
-          class="control-btn control-btn-action"
-          title="View terminal history"
-        >
-          <span v-if="loadingHistory" class="spinner-small"></span>
-          <span v-else>LOG</span>
-        </button>
-
-        <!-- CMD -->
-        <button
-          @click="showCommandPresets = true"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Command presets"
-        >
-          CMD
-        </button>
-
-        <!-- TODO -->
-        <button
-          @click="showQueueModal = true"
-          :disabled="!connected"
-          class="control-btn control-btn-action"
-          title="Manage message queue"
-        >
-          TODO
-        </button>
-      </div>
+      <!-- Second row -->
+      <button @click="sendDirection('left')" :disabled="!connected" class="control-btn" title="Left arrow">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <button @click="sendDirection('down')" :disabled="!connected" class="control-btn" title="Down arrow">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <button @click="sendDirection('right')" :disabled="!connected" class="control-btn" title="Right arrow">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+      <button v-for="num in ['1', '2', '3', '4']" :key="num" @click="sendCommandWithDelay(num)" :disabled="!connected" class="control-btn" :title="`Send ${num}`">{{ num }}</button>
+      <button @click="showUploadModal = true" :disabled="!connected" class="control-btn" title="Upload files to temp directory">UPLOAD</button>
+      <button @click="handleViewHistory" :disabled="loadingHistory || !connected" class="control-btn" title="View terminal history">
+        <span v-if="loadingHistory" class="spinner-small"></span>
+        <span v-else>LOG</span>
+      </button>
+      <button @click="showCommandPresets = true" :disabled="!connected" class="control-btn" title="Command presets">CMD</button>
+      <button @click="showQueueModal = true" :disabled="!connected" class="control-btn" title="Manage message queue">TODO</button>
     </div>
     </div>
 
@@ -686,7 +593,7 @@ onUnmounted(() => {
       <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-500 dark:text-gray-300">
         <div class="text-xl mb-4">Failed to load history</div>
         <div class="text-sm text-red-600 dark:text-red-400 mb-4">{{ historyError }}</div>
-        <button @click="handleBackToTerminal" class="control-btn control-btn-action">
+        <button @click="handleBackToTerminal" class="control-btn">
           Back to Terminal
         </button>
       </div>
@@ -801,61 +708,38 @@ onUnmounted(() => {
 .control-btn {
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
-  border-radius: 4px;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--bg-primary);
+  height: 28px;
+  background-color: transparent;
   color: var(--text-primary);
+  transition: background-color 0.1s;
 }
 
-.control-btn-direction {
-  width: 28px;
-  height: 28px;
-}
-
-.control-btn-direction:hover:not(:disabled) {
+.control-btn:hover:not(:disabled) {
   background-color: var(--bg-tertiary);
 }
-.control-btn-direction:active:not(:disabled) {
-  background-color: var(--border-secondary);
-}
 
-/* Compact button for single letters/numbers - same size as direction buttons */
-.control-btn-compact {
-  width: 28px;
-  height: 28px;
-  font-weight: 600;
-}
-
-.control-btn-compact:hover:not(:disabled) {
-  background-color: var(--bg-tertiary);
-}
-.control-btn-compact:active:not(:disabled) {
-  background-color: var(--border-secondary);
-}
-
-.control-btn-action {
-  min-width: 48px;
-  height: 28px;
-  padding: 0 8px;
-  font-weight: 500;
-}
-
-.control-btn-action:hover:not(:disabled) {
-  background-color: var(--bg-tertiary);
-}
-.control-btn-action:active:not(:disabled) {
+.control-btn:active:not(:disabled) {
   background-color: var(--border-secondary);
 }
 
 .control-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background-color: var(--bg-tertiary);
   color: var(--text-muted);
+}
+
+.control-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.terminal-controls {
+  width: 100%;
 }
 
 /* Small spinner for button */
@@ -873,10 +757,5 @@ onUnmounted(() => {
   to {
     transform: rotate(360deg);
   }
-}
-
-/* Control row styles */
-.control-row {
-  flex-wrap: wrap;
 }
 </style>

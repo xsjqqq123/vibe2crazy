@@ -14,18 +14,29 @@ export interface CommitInfo {
   files: CommitFile[]
 }
 
-export interface CommitFileDiff {
+export interface CommitFileItem {
   path: string
   status: 'A' | 'M' | 'D'
-  original: string
-  modified: string
+  additions: number
+  deletions: number
 }
 
 export interface CommitDiff {
   hash: string
   date: string
   message: string
-  files: CommitFileDiff[]
+  files: CommitFileItem[]
+  total_files: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export interface FileDiff {
+  path: string
+  status: string
+  original: string
+  modified: string
 }
 
 export interface PaginatedCommitsResponse {
@@ -58,8 +69,25 @@ export async function getWorktreeCommits(
   )
 }
 
-export async function getCommitDiff(taskId: string, commitHash: string): Promise<CommitDiff> {
-  return request<CommitDiff>(`/tasks/${taskId}/commits/${commitHash}/diff`)
+export async function getCommitDiff(
+  taskId: string,
+  commitHash: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<CommitDiff> {
+  return request<CommitDiff>(
+    `/tasks/${taskId}/commits/${commitHash}/diff?page=${page}&page_size=${pageSize}`
+  )
+}
+
+export async function getFileDiff(
+  taskId: string,
+  commitHash: string,
+  filePath: string
+): Promise<FileDiff> {
+  return request<FileDiff>(
+    `/tasks/${taskId}/commits/${commitHash}/diff/files/${encodeURIComponent(filePath)}`
+  )
 }
 
 export async function resetToCommit(
@@ -83,6 +111,7 @@ export async function getBranches(gitPath: string): Promise<BranchListResponse> 
 export const gitApi = {
   getWorktreeCommits,
   getCommitDiff,
+  getFileDiff,
   resetToCommit,
   getBranches
 }

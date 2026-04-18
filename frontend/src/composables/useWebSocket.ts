@@ -33,6 +33,8 @@ export function useWebSocket(taskId: string) {
   const output = ref<string[]>([])
   const error = ref<string | null>(null)
   const connectionType = ref<AddressType>('public')
+  let isIntentionalClose = false
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
 
   // Callback for receiving data
   let onDataCallback: ((data: string) => void) | null = null
@@ -44,10 +46,17 @@ export function useWebSocket(taskId: string) {
   const connect = (onData?: (data: string) => void) => {
     // Close existing connection if any
     if (ws.value) {
+      isIntentionalClose = true
       if (ws.value.readyState === WebSocketState.CONNECTING || ws.value.readyState === WebSocketState.OPEN) {
         ws.value.close()
       }
       ws.value = null
+    }
+
+    // Clear any pending reconnect
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
     }
 
     if (!token.value) {
@@ -62,6 +71,7 @@ export function useWebSocket(taskId: string) {
 
     connecting.value = true
     error.value = null
+    isIntentionalClose = false
     connectionType.value = wsNetworkManager.getType()
 
     // Get WebSocket URL from network manager
@@ -118,6 +128,19 @@ export function useWebSocket(taskId: string) {
         connected.value = false
         connecting.value = false
         ws.value = null
+
+        // Auto-reconnect after 10s on abnormal disconnect (non-mobile only)
+        if (!isIntentionalClose && window.innerWidth >= 768 && token.value) {
+          if (onDataCallback) {
+            onDataCallback('\r\n\x1b[33mConnection lost. Reconnecting in 10s...\x1b[0m')
+          }
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null
+            if (token.value) {
+              connect()
+            }
+          }, 10000)
+        }
       }
     } catch (err: any) {
       error.value = err.message
@@ -126,6 +149,13 @@ export function useWebSocket(taskId: string) {
   }
 
   const disconnect = () => {
+    isIntentionalClose = true
+
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
+    }
+
     if (ws.value) {
       ws.value.close()
       ws.value = null

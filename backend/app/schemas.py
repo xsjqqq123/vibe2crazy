@@ -231,11 +231,31 @@ class CommitFileDiffSchema(BaseModel):
     modified: str
 
 
+class CommitFileItemSchema(BaseModel):
+    """Lightweight file item in a commit (no diff content)"""
+    path: str
+    status: str  # 'A', 'M', 'D'
+    additions: int
+    deletions: int
+
+
 class CommitDiffSchema(BaseModel):
     hash: str
     date: str
     message: str
-    files: List[CommitFileDiffSchema]
+    files: List[CommitFileItemSchema]
+    total_files: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class FileDiffSchema(BaseModel):
+    """Single file diff content"""
+    path: str
+    status: str
+    original: str
+    modified: str
 
 
 class ErrorResponse(BaseModel):
@@ -372,5 +392,23 @@ class LocalInfoResponse(BaseModel):
 class TokenHashResponse(BaseModel):
     """Response for /api/tunnel/token_hash endpoint."""
     token_hash: str
+
+
+# Password management schemas
+class PasswordStatusResponse(BaseModel):
+    """Response for password status check."""
+    is_set: bool
+
+
+class ChangePasswordRequest(BaseModel):
+    """Request for changing password."""
+    new_password: str
+    old_password: Optional[str] = None
+
+
+class ChangePasswordResponse(BaseModel):
+    """Response for password change."""
+    success: bool
+    message: str
 
 

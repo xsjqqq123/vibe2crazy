@@ -4,11 +4,19 @@ import { createPinia } from 'pinia'
 import router from './router'
 import App from './App.vue'
 import { initApiClient, startLanDetection } from './api/client'
+import { loader } from '@guolao/vue-monaco-editor'
 // wsNetworkManager auto-initializes when imported, listening to networkDetector
 import './utils/wsNetworkManager'
 import './assets/styles/main.css'
 import 'splitpanes/dist/splitpanes.css'
 import 'highlight.js/styles/atom-one-dark.css'
+
+// Configure Monaco to load from CDN instead of bundling
+loader.config({
+  paths: {
+    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
+  }
+})
 
 async function bootstrap() {
   try {

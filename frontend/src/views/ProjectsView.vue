@@ -35,7 +35,7 @@ const showUpdateModal = ref(false)
 const updateDismissed = ref(false)
 
 const projects = ref<Project[]>([])
-const loading = ref(false)
+const loading = ref(true)
 const showCreateDialog = ref(false)
 const showGitInitDialog = ref(false)
 const showCreateDirectoryDialog = ref(false)
@@ -178,7 +178,12 @@ async function manualCheckUpdate() {
     showUpdateToast.value = true
     updateDismissed.value = false
   } else {
-    alert('You are already on the latest version.')
+    await showConfirm({
+      title: 'No Update Available',
+      message: 'You are already on the latest version.',
+      confirmText: 'OK',
+      cancelText: ''
+    })
   }
 }
 

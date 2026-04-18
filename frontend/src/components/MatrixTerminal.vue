@@ -179,8 +179,39 @@ const getWsUrl = () => {
   return ''
 }
 
+const checkApiError = () => {
+    if (!xterm.value) return
+    const buffer = xterm.value.buffer.active
+    const visibleLines: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      visibleLines.push(buffer.getLine(i)?.translateToString(true) ?? '')
+    }
+    const text = visibleLines.join(' ')
+    const hasApiError = text.includes('API Error:')
+
+    if (hasApiError && !apiErrorTimer) {
+      apiErrorTimer = setTimeout(() => {
+        apiErrorTimer = null
+        if (!xterm.value) return
+        const buf = xterm.value.buffer.active
+        const lines: string[] = []
+        for (let i = 0; i < buf.length; i++) {
+          lines.push(buf.getLine(i)?.translateToString(true) ?? '')
+        }
+        if (lines.join(' ').includes('API Error:')) {
+          sendDirect('continue')
+          setTimeout(() => sendDirect('\r'), 500)
+        }
+      }, 20000)
+    } else if (!hasApiError && apiErrorTimer) {
+      clearTimeout(apiErrorTimer)
+      apiErrorTimer = null
+    }
+  }
+
 const connect = () => {
   if (ws.value) {
+    isIntentionalClose = true
     ws.value.close()
     ws.value = null
   }
@@ -195,6 +226,7 @@ const connect = () => {
 
   connecting.value = true
   connectionType.value = wsNetworkManager.getType()
+  isIntentionalClose = false
 
   try {
     ws.value = new WebSocket(wsUrl)
@@ -207,6 +239,8 @@ const connect = () => {
         resize(xterm.value.cols, xterm.value.rows)
         xterm.value.writeln('\x1b[32m✓ Connected\x1b[0m')
       }
+      // Reset API error watcher on reconnect
+      if (apiErrorTimer) { clearTimeout(apiErrorTimer); apiErrorTimer = null }
     }
 
     ws.value.onmessage = (event) => {
@@ -214,6 +248,7 @@ const connect = () => {
         const msg = JSON.parse(event.data)
         if (msg.type === 'output') {
           xterm.value?.write(msg.data)
+          checkApiError()
         } else if (msg.type === 'error') {
           xterm.value?.writeln(`\x1b[31mError: ${msg.message}\x1b[0m`)
         } else if (msg.type === 'scroll_mode') {
@@ -221,6 +256,7 @@ const connect = () => {
         }
       } catch {
         xterm.value?.write(event.data)
+        checkApiError()
       }
     }
 
@@ -234,6 +270,19 @@ const connect = () => {
       connecting.value = false
       scrollMode.value = false
       ws.value = null
+
+      // Auto-reconnect after 10s on abnormal disconnect (non-mobile only)
+      if (!isIntentionalClose && window.innerWidth >= 768 && token.value) {
+        if (xterm.value) {
+          xterm.value.writeln('\r\n\x1b[33mConnection lost. Reconnecting in 10s...\x1b[0m')
+        }
+        reconnectTimeout = setTimeout(() => {
+          reconnectTimeout = null
+          if (token.value) {
+            connect()
+          }
+        }, 10000)
+      }
     }
   } catch (err: any) {
     connecting.value = false
@@ -242,6 +291,13 @@ const connect = () => {
 }
 
 const disconnect = () => {
+  isIntentionalClose = true
+
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout)
+    reconnectTimeout = null
+  }
+
   if (ws.value) {
     ws.value.close()
     ws.value = null
@@ -256,6 +312,12 @@ const disconnect = () => {
     connectTimeout = null
   }
 
+  // Clear API error timer
+  if (apiErrorTimer) {
+    clearTimeout(apiErrorTimer)
+    apiErrorTimer = null
+  }
+
   // Unsubscribe from network changes
   if (unsubscribeNetwork) {
     unsubscribeNetwork()
@@ -263,9 +325,23 @@ const disconnect = () => {
   }
 }
 
+// Auto-reconnect
+let isIntentionalClose = false
+let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+
+// API Error auto-continue watcher
+let apiErrorTimer: ReturnType<typeof setTimeout> | null = null
+
 const send = (data: string) => {
   // Only send input when this terminal is selected
   if (!props.isSelected) return
+  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+    ws.value.send(JSON.stringify({ type: 'input', data }))
+  }
+}
+
+const sendDirect = (data: string) => {
+  // Send without selection check (for automated actions like auto-continue)
   if (ws.value && ws.value.readyState === WebSocket.OPEN) {
     ws.value.send(JSON.stringify({ type: 'input', data }))
   }
@@ -500,6 +576,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
+  if (reconnectTimeout) clearTimeout(reconnectTimeout)
+  if (apiErrorTimer) clearTimeout(apiErrorTimer)
 
   // Clean up wheel event listener
   if (wheelHandler && terminalRef.value) {
@@ -578,7 +656,7 @@ onUnmounted(() => {
           connectionType === 'lan' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
         ]"
       >
-        {{ connectionType === 'lan' ? 'LAN' : '公网' }}
+        {{ connectionType === 'lan' ? 'LAN' : 'WAN' }}
       </span>
     </div>
 

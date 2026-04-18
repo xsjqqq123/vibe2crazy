@@ -1297,17 +1297,21 @@ class GitService:
             return False, str(e), False, []
 
     @staticmethod
-    def get_commit_diff(worktree_path: str, commit_hash: str) -> dict:
+    def get_commit_diff(worktree_path: str, commit_hash: str, page: int = 1, page_size: int = 20) -> dict:
         """
-        Get file changes for a specific commit with full commit info.
+        Get file changes for a specific commit (lightweight version without diff content).
 
         Returns dict with:
         - hash: commit hash (short)
         - date: commit date
         - message: commit message
-        - files: list of file changes
+        - files: list of file items (path, status, additions, deletions)
+        - total_files: total number of files in commit
+        - page: current page
+        - page_size: items per page
+        - total_pages: total number of pages
         """
-        logger.debug(f"Getting commit diff for {commit_hash} in {worktree_path}")
+        logger.debug(f"Getting commit diff for {commit_hash} in {worktree_path}, page={page}")
         try:
             # Get commit info (hash, date, message)
             commit_result = subprocess.run(
@@ -1319,13 +1323,13 @@ class GitService:
 
             if commit_result.returncode != 0:
                 logger.error(f"Failed to get commit info: {commit_result.stderr}")
-                return {"files": []}
+                return {"files": [], "total_files": 0, "page": page, "page_size": page_size, "total_pages": 0}
 
             # Parse hash, date, message
             parts = commit_result.stdout.strip().split('|')
             if len(parts) < 3:
                 logger.error(f"Invalid commit info format: {parts}")
-                return {"files": []}
+                return {"files": [], "total_files": 0, "page": page, "page_size": page_size, "total_pages": 0}
 
             commit_hash_full = parts[0]
             commit_date = parts[1]
@@ -1348,10 +1352,14 @@ class GitService:
                     "hash": commit_hash_short,
                     "date": commit_date,
                     "message": commit_message,
-                    "files": []
+                    "files": [],
+                    "total_files": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": 0
                 }
 
-            # Get all changed files in this commit
+            # Get all changed files in this commit with stats
             diff_result = subprocess.run(
                 ["git", "diff", "--name-status", f"{parent_hash}..{commit_hash}"],
                 cwd=worktree_path,
@@ -1361,12 +1369,33 @@ class GitService:
 
             if diff_result.returncode != 0:
                 logger.error(f"Failed to get commit diff: {diff_result.stderr}")
-                return {"files": []}
+                return {"files": [], "total_files": 0, "page": page, "page_size": page_size, "total_pages": 0}
 
-            logger.info(f"Git diff output for {commit_hash}: '{diff_result.stdout}'")
+            # Also get stats for additions/deletions
+            stats_result = subprocess.run(
+                ["git", "diff", "--numstat", f"{parent_hash}..{commit_hash}"],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+
+            # Build a map of file -> (additions, deletions) from stats
+            stats_map = {}
+            if stats_result.returncode == 0:
+                for line in stats_result.stdout.strip().split('\n'):
+                    if line:
+                        parts = line.split('\t')
+                        if len(parts) >= 3:
+                            file_path = parts[2]
+                            try:
+                                additions = int(parts[0]) if parts[0] != '-' else 0
+                                deletions = int(parts[1]) if parts[1] != '-' else 0
+                                stats_map[file_path] = (additions, deletions)
+                            except ValueError:
+                                stats_map[file_path] = (0, 0)
 
             # Parse git diff output to get file changes
-            files_diff = []
+            files_list = []
             lines = diff_result.stdout.strip().split('\n')
 
             for line in lines:
@@ -1376,100 +1405,175 @@ class GitService:
                 # Parse diff name-status lines (format: "STATUS<TAB>filename" or "STATUS<metadata>TAB>filename")
                 if '\t' in line and line[0] in ['M', 'A', 'D', 'R', 'C']:
                     parts = line.split('\t')
-                    # First part is status (may have metadata like "^I", "^D")
                     status_part = parts[0]
                     status_char = status_part[0]
-
-                    # Find the actual filename (skip metadata parts)
                     file_path = parts[-1].strip()
 
-                    # Map status character to our simplified status
-                    if status_char in ['M', 'A', 'D']:
-                        # Keep our simplified status (ignore rename/copy for now)
-                        pass
-                    else:
-                        continue  # Skip R/C/U statuses for now
+                    # Only handle M, A, D
+                    if status_char not in ['M', 'A', 'D']:
+                        continue
 
-                    # Determine file content
-                    if status_char == 'D':
-                        # Deleted file: show empty content
-                        files_diff.append({
-                            'path': file_path,
-                            'status': 'D',
-                            'original': '',
-                            'modified': ''
-                        })
-                    else:
-                        # Added or Modified file: check size and get content
-                        # Get file size from git
-                        size_result = subprocess.run(
-                            ["git", "cat-file", "-s", f"{commit_hash}:{file_path}"],
-                            cwd=worktree_path,
-                            capture_output=True,
-                            text=True, encoding="utf-8"
-                        )
+                    # Get stats
+                    stats = stats_map.get(file_path, (0, 0))
+                    additions, deletions = stats
 
-                        if size_result.returncode == 0:
-                            try:
-                                file_size = int(size_result.stdout.strip())
-                                if file_size > MAX_FILE_SIZE:
-                                    # File too large, add with error message
-                                    size_formatted = format_file_size(file_size)
-                                    files_diff.append({
-                                        'path': file_path,
-                                        'status': 'A' if status_char == 'A' else 'M',
-                                        'original': '',
-                                        'modified': f'[File too large to display ({size_formatted})]',
-                                        'error': f'File too large to display ({size_formatted})'
-                                    })
-                                    continue
-                            except ValueError:
-                                pass
+                    files_list.append({
+                        'path': file_path,
+                        'status': status_char,
+                        'additions': additions,
+                        'deletions': deletions
+                    })
 
-                        # Get content from parent and current commit
-                        # Use errors='replace' to handle binary files gracefully
-                        try:
-                            original_result = subprocess.run(
-                                ["git", "show", f"{parent_hash}:{file_path}"],
-                                cwd=worktree_path,
-                                capture_output=True,
-                                text=True, encoding="utf-8",
-                                errors='replace'
-                            )
-                            original_content = original_result.stdout if original_result.returncode == 0 else ''
-                        except Exception:
-                            original_content = ''
+            total_files = len(files_list)
+            total_pages = (total_files + page_size - 1) // page_size if total_files > 0 else 0
 
-                        try:
-                            modified_result = subprocess.run(
-                                ["git", "show", f"{commit_hash}:{file_path}"],
-                                cwd=worktree_path,
-                                capture_output=True,
-                                text=True, encoding="utf-8",
-                                errors='replace'
-                            )
-                            modified_content = modified_result.stdout if modified_result.returncode == 0 else ''
-                        except Exception:
-                            modified_content = ''
+            # Paginate
+            start = (page - 1) * page_size
+            end = start + page_size
+            paginated_files = files_list[start:end]
 
-                        files_diff.append({
-                            'path': file_path,
-                            'status': 'A' if status_char == 'A' else 'M',
-                            'original': original_content,
-                            'modified': modified_content
-                        })
-
-            logger.debug(f"Found {len(files_diff)} files in commit {commit_hash}")
+            logger.debug(f"Found {total_files} files in commit {commit_hash}, returning page {page}/{total_pages}")
             return {
                 "hash": commit_hash_short,
                 "date": commit_date,
                 "message": commit_message,
-                "files": files_diff
+                "files": paginated_files,
+                "total_files": total_files,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages
             }
 
         except Exception as e:
             logger.error(f"Error getting commit diff: {e}")
-            return {"files": []}
+            return {"files": [], "total_files": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    @staticmethod
+    def get_file_diff(worktree_path: str, commit_hash: str, file_path: str) -> dict:
+        """
+        Get diff content for a single file in a commit.
+
+        Args:
+            worktree_path: Path to the git worktree
+            commit_hash: Commit hash
+            file_path: Path to the file
+
+        Returns dict with:
+            - path: file path
+            - status: 'A', 'M', or 'D'
+            - original: original content (empty string for added files)
+            - modified: modified content (empty string for deleted files)
+        """
+        logger.debug(f"Getting file diff for {file_path} in commit {commit_hash}")
+        try:
+            # Get parent hash
+            parent_result = subprocess.run(
+                ["git", "rev-parse", f"{commit_hash}^"],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+
+            parent_hash = parent_result.stdout.strip() if parent_result.returncode == 0 else None
+
+            # Get file status in this commit
+            status_result = subprocess.run(
+                ["git", "diff", "--name-status", f"{parent_hash or commit_hash}..{commit_hash}"],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+
+            status_char = 'M'
+            if status_result.returncode == 0:
+                for line in status_result.stdout.strip().split('\n'):
+                    if '\t' in line and line.split('\t')[-1].strip() == file_path:
+                        status_char = line[0]
+                        break
+
+            # Handle based on status
+            if status_char == 'D':
+                # Deleted file: show original content only
+                try:
+                    original_result = subprocess.run(
+                        ["git", "show", f"{parent_hash}:{file_path}"],
+                        cwd=worktree_path,
+                        capture_output=True,
+                        text=True, encoding="utf-8",
+                        errors='replace'
+                    )
+                    original_content = original_result.stdout if original_result.returncode == 0 else ''
+                except Exception:
+                    original_content = ''
+
+                return {
+                    'path': file_path,
+                    'status': 'D',
+                    'original': original_content,
+                    'modified': ''
+                }
+            else:
+                # Added or Modified file
+                # Check file size first
+                size_result = subprocess.run(
+                    ["git", "cat-file", "-s", f"{commit_hash}:{file_path}"],
+                    cwd=worktree_path,
+                    capture_output=True,
+                    text=True, encoding="utf-8"
+                )
+
+                if size_result.returncode == 0:
+                    try:
+                        file_size = int(size_result.stdout.strip())
+                        if file_size > MAX_FILE_SIZE:
+                            size_formatted = format_file_size(file_size)
+                            return {
+                                'path': file_path,
+                                'status': 'A' if status_char == 'A' else 'M',
+                                'original': '',
+                                'modified': f'[File too large to display ({size_formatted})]'
+                            }
+                    except ValueError:
+                        pass
+
+                # Get original content (empty for new files)
+                original_content = ''
+                if parent_hash:
+                    try:
+                        original_result = subprocess.run(
+                            ["git", "show", f"{parent_hash}:{file_path}"],
+                            cwd=worktree_path,
+                            capture_output=True,
+                            text=True, encoding="utf-8",
+                            errors='replace'
+                        )
+                        original_content = original_result.stdout if original_result.returncode == 0 else ''
+                    except Exception:
+                        original_content = ''
+
+                # Get modified content
+                try:
+                    modified_result = subprocess.run(
+                        ["git", "show", f"{commit_hash}:{file_path}"],
+                        cwd=worktree_path,
+                        capture_output=True,
+                        text=True, encoding="utf-8",
+                        errors='replace'
+                    )
+                    modified_content = modified_result.stdout if modified_result.returncode == 0 else ''
+                except Exception:
+                    modified_content = ''
+
+                return {
+                    'path': file_path,
+                    'status': 'A' if status_char == 'A' else 'M',
+                    'original': original_content,
+                    'modified': modified_content
+                }
+
+        except Exception as e:
+            logger.error(f"Error getting file diff: {e}")
+            return {'path': file_path, 'status': 'M', 'original': '', 'modified': ''}
 
     @staticmethod
     def reset_to_commit(worktree_path: str, commit_hash: str, include_commit: bool = False) -> tuple[bool, str]:

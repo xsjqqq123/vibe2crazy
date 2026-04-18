@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
 from app.models import Task, Project
-from app.schemas import MergeRequest, MergeResponse, AcceptRequest, AcceptResponse, CommitSchema, CommitDiffSchema, PaginatedCommitsSchema, CommandExecution
+from app.schemas import MergeRequest, MergeResponse, AcceptRequest, AcceptResponse, CommitSchema, CommitDiffSchema, PaginatedCommitsSchema, CommandExecution, FileDiffSchema
 from app.auth import require_auth
 from app.services.git_service import GitService
 
@@ -269,10 +269,12 @@ async def delete_branch(
 async def get_commit_diff(
     task_id: str,
     commit_hash: str,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of files per page"),
     db: Session = Depends(get_db),
     current_user: Task = Depends(require_auth)
 ):
-    """Get file changes for a specific commit"""
+    """Get file list for a specific commit (lightweight, paginated, no diff content)"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(
@@ -289,7 +291,9 @@ async def get_commit_diff(
 
     result = GitService.get_commit_diff(
         worktree_path=task.worktree_path,
-        commit_hash=commit_hash
+        commit_hash=commit_hash,
+        page=page,
+        page_size=page_size
     )
 
     if "error" in result:
@@ -302,7 +306,48 @@ async def get_commit_diff(
         hash=result.get("hash", commit_hash[:8]),
         date=result.get("date", ""),
         message=result.get("message", ""),
-        files=result.get("files", [])
+        files=result.get("files", []),
+        total_files=result.get("total_files", 0),
+        page=result.get("page", page),
+        page_size=result.get("page_size", page_size),
+        total_pages=result.get("total_pages", 0)
+    )
+
+
+@router.get("/{task_id}/commits/{commit_hash}/diff/files/{file_path:path}", response_model=FileDiffSchema)
+async def get_file_diff(
+    task_id: str,
+    commit_hash: str,
+    file_path: str,
+    db: Session = Depends(get_db),
+    current_user: Task = Depends(require_auth)
+):
+    """Get diff content for a single file in a commit"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    project = db.query(Project).filter(Project.id == task.project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+
+    result = GitService.get_file_diff(
+        worktree_path=task.worktree_path,
+        commit_hash=commit_hash,
+        file_path=file_path
+    )
+
+    return FileDiffSchema(
+        path=result.get("path", file_path),
+        status=result.get("status", "M"),
+        original=result.get("original", ""),
+        modified=result.get("modified", "")
     )
 
 

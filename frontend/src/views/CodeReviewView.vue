@@ -84,8 +84,8 @@ const contextMenu = ref({
 })
 
 // Commit diff view
-const selectedCommit = ref<CommitDiff | null>(null)
-const expandedFilesInCommit = ref<Set<string>>(new Set())
+const selectedCommitHash = ref<string | null>(null)
+const selectedCommitMessage = ref('')
 const loadingCommitDiff = ref(false)
 const commitDiffError = ref('')
 
@@ -621,9 +621,10 @@ const loadFileTree = async () => {
   }
 }
 
-const loadTask = async () => {
+const loadTask = async (taskIdOverride?: string) => {
+  const id = taskIdOverride || taskId.value
   try {
-    const taskData = await tasksApi.get(taskId.value)
+    const taskData = await tasksApi.get(id)
     store.setCurrentTask(taskData)
     store.setCurrentProject({ id: taskData.project_id })
     // Also load all tasks for the sidebar list
@@ -1655,16 +1656,17 @@ const handleChangedFilesTouchMove = () => {
 const loadCommitDiff = async (commitHash: string) => {
   loadingCommitDiff.value = true
   commitDiffError.value = ''
-  expandedFilesInCommit.value.clear()
+  selectedCommitHash.value = commitHash
   currentFile.value = null  // Clear file context
+
+  // Find commit message from commits list for header display
+  const commitInfo = commits.value.find(c => c.hash === commitHash)
+  selectedCommitMessage.value = commitInfo?.message || ''
 
   try {
     console.log('[DEBUG] Loading commit diff for:', commitHash)
     console.log('[DEBUG] taskId:', taskId.value)
-    selectedCommit.value = await gitApi.getCommitDiff(taskId.value, commitHash)
-    console.log('[DEBUG] Received commit diff:', selectedCommit.value)
-    console.log('[DEBUG] Files in commit:', selectedCommit.value?.files?.length || 'N/A')
-    console.log('[DEBUG] Setting editorMode to commit-diff')
+    // The CommitDiffView component handles lazy loading internally
     editorMode.value = 'commit-diff'
   } catch (err: any) {
     console.error('[DEBUG] Failed to load commit diff:', err)
@@ -1676,8 +1678,8 @@ const loadCommitDiff = async (commitHash: string) => {
 }
 
 const closeCommitDiff = () => {
-  selectedCommit.value = null
-  expandedFilesInCommit.value.clear()
+  selectedCommitHash.value = null
+  selectedCommitMessage.value = ''
   commitDiffError.value = ''
   editorMode.value = 'editor'
 }
@@ -1752,7 +1754,7 @@ onMounted(async () => {
 
   if (targetTaskId) {
     loadLayout()
-    await loadTask()
+    await loadTask(targetTaskId)
     loadFileTree()
     loadChangedFiles().then(() => { initialLoading.value = false })
     loadCommits()
@@ -1824,7 +1826,7 @@ onUnmounted(() => {
             class="p-1.5 rounded-lg hover:bg-sub"
             title="Terminal"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
@@ -2065,7 +2067,7 @@ onUnmounted(() => {
             <!-- Editor area -->
             <main class="flex-1 flex flex-col overflow-hidden bg-main">
               <!-- Editor header -->
-              <div v-if="currentFile || selectedCommit || imagePreviewFile" class="bg-sub border-b border-main px-4 py-1 flex items-center gap-2 min-h-[32px]">
+              <div v-if="currentFile || selectedCommitHash || imagePreviewFile" class="bg-sub border-b border-main px-4 py-1 flex items-center gap-2 min-h-[32px]">
                 <div class="text-sm text-sub flex items-center gap-2 min-w-0 flex-1 truncate">
                   <span v-if="imagePreviewFile" class="text-base shrink-0">🖼️</span>
                   <span v-else-if="editorMode === 'commit-diff'" class="text-base shrink-0">📋</span>
@@ -2076,8 +2078,8 @@ onUnmounted(() => {
                   <span v-if="imagePreviewFile" class="truncate">
                     {{ imagePreviewFile }}
                   </span>
-                  <span v-else-if="editorMode === 'commit-diff' && selectedCommit" class="truncate">
-                    Commit: {{ selectedCommit.hash }} - {{ selectedCommit.message }}
+                  <span v-else-if="editorMode === 'commit-diff' && selectedCommitHash" class="truncate">
+                    Commit: {{ selectedCommitHash.slice(0, 8) }} - {{ selectedCommitMessage }}
                   </span>
                   <span v-else class="truncate">
                     {{ currentFile }}{{ isFileDeleted ? ' (deleted)' : '' }}{{ editorMode === 'conflict' ? ' (conflict)' : '' }}
@@ -2163,7 +2165,7 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Empty state -->
-                <div v-else-if="!currentFile && !selectedCommit && !pdfPromptFile && !imagePreviewFile" class="flex items-center justify-center h-full text-sub">
+                <div v-else-if="!currentFile && !selectedCommitHash && !pdfPromptFile && !imagePreviewFile" class="flex items-center justify-center h-full text-sub">
                   Select a file to edit
                 </div>
 
@@ -2243,9 +2245,9 @@ onUnmounted(() => {
 
                 <!-- Commit Diff View -->
                 <CommitDiffView
-                  v-else-if="editorMode === 'commit-diff' && selectedCommit"
-                  :commit="selectedCommit"
-                  :expandedFiles="expandedFilesInCommit"
+                  v-else-if="editorMode === 'commit-diff' && selectedCommitHash"
+                  :task-id="taskId"
+                  :commit-hash="selectedCommitHash"
                 />
 
                 <!-- File Diff Editor -->

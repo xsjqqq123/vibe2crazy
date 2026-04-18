@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Authentication
     vibe2crazy_password: str = "password"
-    session_expire_hours: int = 24
+    session_expire_hours: int = 720  # 30 days
     secret_key: str = "change-this-secret-key"
 
     # Storage
