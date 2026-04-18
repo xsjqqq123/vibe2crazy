@@ -575,8 +575,8 @@ onUnmounted(() => {
         <button v-for="num in ['1', '2', '3', '4']" :key="num" @click="sendCommandWithDelay(num)" :disabled="!connected" class="control-btn" :title="`Send ${num}`">{{ num }}</button>
         <button @click="showCommandPresets = true" :disabled="!connected" class="control-btn" title="Command presets">CMD</button>
       </div>
-      <!-- Row 3: TAB + ENTER + GO + ABC + UPLOAD (evenly distributed) -->
-      <div class="flex justify-evenly">
+      <!-- Row 3: TAB + ENTER + GO + ABC + UPLOAD -->
+      <div class="grid" style="grid-template-columns: repeat(5, 1fr);">
         <button @click="send('\x1b[Z')" :disabled="!connected" class="control-btn" title="Send Shift+Tab">TAB</button>
         <button @click="send('\r')" :disabled="!connected" class="control-btn" title="Send Enter key">ENTER</button>
         <button @click="sendCommandWithDelay('Go')" :disabled="!connected" class="control-btn" title="Send 'Go'">GO</button>
