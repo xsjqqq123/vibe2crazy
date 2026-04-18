@@ -573,13 +573,13 @@ onUnmounted(() => {
           </svg>
         </button>
         <button v-for="num in ['1', '2', '3', '4']" :key="num" @click="sendCommandWithDelay(num)" :disabled="!connected" class="control-btn" :title="`Send ${num}`">{{ num }}</button>
-        <button @click="sendCommandWithDelay('Go')" :disabled="!connected" class="control-btn" title="Send 'Go'">GO</button>
+        <button @click="showCommandPresets = true" :disabled="!connected" class="control-btn" title="Command presets">CMD</button>
       </div>
-      <!-- Row 3: TAB + UPLOAD + CMD + ABC + TODO (evenly distributed) -->
+      <!-- Row 3: TAB + UPLOAD + GO + ABC + TODO (evenly distributed) -->
       <div class="flex justify-evenly">
         <button @click="send('\x1b[Z')" :disabled="!connected" class="control-btn" title="Send Shift+Tab">TAB</button>
         <button @click="send('\r')" :disabled="!connected" class="control-btn" title="Send Enter key">ENTER</button>
-        <button @click="showCommandPresets = true" :disabled="!connected" class="control-btn" title="Command presets">CMD</button>
+        <button @click="sendCommandWithDelay('Go')" :disabled="!connected" class="control-btn" title="Send 'Go'">GO</button>
         <button @click="showQuickInput = true" :disabled="!connected" class="control-btn" title="Quick input - ESC, Ctrl+C, INPUT">ABC</button>
         <button @click="showQueueModal = true" :disabled="!connected" class="control-btn" title="Manage message queue">TODO</button>
       </div>
