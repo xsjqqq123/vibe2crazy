@@ -32,9 +32,9 @@ interface ButtonStates {
 
 interface Layout {
   sidebar: number
-  changedFiles: number
-  files: number
-  commits: number
+  filesPane: number      // File tree height
+  tabbedPane: number     // Changes/Commits middle pane
+  tasksPane: number      // Task list at bottom
   terminal: number
 }
 
@@ -292,9 +292,9 @@ const showFileQuickJump = ref(false)
 // Resizable panels state
 const layout = ref<Layout>({
   sidebar: 25,
-  changedFiles: 60,
-  files: 15,
-  commits: 25,
+  filesPane: 55,
+  tabbedPane: 30,
+  tasksPane: 15,
   terminal: 50
 })
 
@@ -367,77 +367,63 @@ const loadLayout = () => {
         const parsed = JSON.parse(saved)
         console.log('[Layout Debug] Parsed layout', parsed)
 
-        // Check if we need to reset layout due to panel swap
-        // If changedFiles < files, it's likely old layout (pre-swap)
-        const needsReset = parsed.changedFiles < parsed.files
-
         // Validate parsed layout has all required fields
         if (typeof parsed.sidebar === 'number' &&
-            typeof parsed.changedFiles === 'number' &&
-            typeof parsed.files === 'number' &&
-            typeof parsed.commits === 'number' &&
+            typeof parsed.filesPane === 'number' &&
+            typeof parsed.tabbedPane === 'number' &&
+            typeof parsed.tasksPane === 'number' &&
             typeof parsed.terminal === 'number') {
 
-          if (needsReset) {
-            console.log('[Layout Debug] Resetting layout due to panel reordering')
-            // Clear old layout and use defaults
-            try {
-              localStorage.removeItem(STORAGE_KEY.value)
-            } catch (e) {
-              console.warn('[Layout Debug] Failed to remove item from localStorage', e)
-            }
-          } else {
-            console.log('[Layout Debug] Applying parsed layout to layout.value')
+          console.log('[Layout Debug] Applying parsed layout to layout.value')
 
-            // Set flag to prevent saving while loading
-            isLoadingLayout.value = true
+          // Set flag to prevent saving while loading
+          isLoadingLayout.value = true
 
-            // Update the reactive layout value
-            layout.value = parsed
-            console.log('[Layout Debug] Layout after applying', layout.value)
+          // Update the reactive layout value
+          layout.value = parsed
+          console.log('[Layout Debug] Layout after applying', layout.value)
 
-            // Programmatically set splitpanes sizes to match loaded layout
-            // Wait for next tick to ensure components are mounted
-            nextTick(() => {
-              // The splitpanes ref exposes internal panes array
-              const mainPanes = (mainSplitpanesRef.value as any)?.panes
-              const sidebarPanes = (sidebarSplitpanesRef.value as any)?.panes
-              const editorPanes = (editorSplitpanesRef.value as any)?.panes
+          // Programmatically set splitpanes sizes to match loaded layout
+          // Wait for next tick to ensure components are mounted
+          nextTick(() => {
+            // The splitpanes ref exposes internal panes array
+            const mainPanes = (mainSplitpanesRef.value as any)?.panes
+            const sidebarPanes = (sidebarSplitpanesRef.value as any)?.panes
+            const editorPanes = (editorSplitpanesRef.value as any)?.panes
 
-              console.log('[Layout Debug] Splitpanes refs', {
-                main: mainSplitpanesRef.value,
-                sidebar: sidebarSplitpanesRef.value,
-                editor: editorSplitpanesRef.value,
-                mainPanes,
-                sidebarPanes,
-                editorPanes
-              })
-
-              if (mainPanes && mainPanes.length >= 2) {
-                console.log('[Layout Debug] Setting main splitpanes sizes', [parsed.sidebar, 100 - parsed.sidebar])
-                mainPanes[0].size = parsed.sidebar
-                mainPanes[1].size = 100 - parsed.sidebar
-              }
-              if (sidebarPanes && sidebarPanes.length >= 3) {
-                console.log('[Layout Debug] Setting sidebar splitpanes sizes', [parsed.changedFiles, parsed.files, parsed.commits])
-                sidebarPanes[0].size = parsed.changedFiles
-                sidebarPanes[1].size = parsed.files
-                sidebarPanes[2].size = parsed.commits
-              }
-              if (editorPanes && editorPanes.length >= 2 && showTerminal.value) {
-                console.log('[Layout Debug] Setting editor splitpanes sizes', [100 - parsed.terminal, parsed.terminal])
-                editorPanes[0].size = 100 - parsed.terminal
-                editorPanes[1].size = parsed.terminal
-              }
-
-              // Clear flag after a delay to allow splitpanes to process changes
-              setTimeout(() => {
-                isLoadingLayout.value = false
-                layoutLoaded.value = true
-                console.log('[Layout Debug] Layout loading complete')
-              }, 200)
+            console.log('[Layout Debug] Splitpanes refs', {
+              main: mainSplitpanesRef.value,
+              sidebar: sidebarSplitpanesRef.value,
+              editor: editorSplitpanesRef.value,
+              mainPanes,
+              sidebarPanes,
+              editorPanes
             })
-          }
+
+            if (mainPanes && mainPanes.length >= 2) {
+              console.log('[Layout Debug] Setting main splitpanes sizes', [parsed.sidebar, 100 - parsed.sidebar])
+              mainPanes[0].size = parsed.sidebar
+              mainPanes[1].size = 100 - parsed.sidebar
+            }
+            if (sidebarPanes && sidebarPanes.length >= 3) {
+              console.log('[Layout Debug] Setting sidebar splitpanes sizes', [parsed.filesPane, parsed.tabbedPane, parsed.tasksPane])
+              sidebarPanes[0].size = parsed.filesPane
+              sidebarPanes[1].size = parsed.tabbedPane
+              sidebarPanes[2].size = parsed.tasksPane
+            }
+            if (editorPanes && editorPanes.length >= 2 && showTerminal.value) {
+              console.log('[Layout Debug] Setting editor splitpanes sizes', [100 - parsed.terminal, parsed.terminal])
+              editorPanes[0].size = 100 - parsed.terminal
+              editorPanes[1].size = parsed.terminal
+            }
+
+            // Clear flag after a delay to allow splitpanes to process changes
+            setTimeout(() => {
+              isLoadingLayout.value = false
+              layoutLoaded.value = true
+              console.log('[Layout Debug] Layout loading complete')
+            }, 200)
+          })
         } else {
           console.warn('[Layout Debug] Parsed layout missing required fields', parsed)
         }
@@ -470,13 +456,12 @@ const checkMobile = () => {
 type LayoutEvent = any[]
 
 const handleSidebarResize = (event: LayoutEvent) => {
-  console.log('[Layout Debug] handleSidebarResize called', event)
-  // event.panes is the array of pane objects
   const panes = (event as any).panes
-  if (panes && panes.length >= 2) {
-    layout.value.files = Math.round(panes[1].size)
-    console.log('[Layout Debug] Updated layout', layout.value)
-  }
+  if (!panes || panes.length < 3) return
+
+  layout.value.filesPane = Math.round(panes[0].size)
+  layout.value.tabbedPane = Math.round(panes[1].size)
+  layout.value.tasksPane = Math.round(panes[2].size)
 }
 
 const handleEditorResize = (event: LayoutEvent) => {
@@ -555,14 +540,14 @@ watch(taskId, async () => {
 watch(() => layout.value.sidebar, (newVal, oldVal) => {
   console.log('[Layout Debug] sidebar changed', { old: oldVal, new: newVal })
 })
-watch(() => layout.value.changedFiles, (newVal, oldVal) => {
-  console.log('[Layout Debug] changedFiles changed', { old: oldVal, new: newVal })
+watch(() => layout.value.filesPane, (newVal, oldVal) => {
+  console.log('[Layout Debug] filesPane changed', { old: oldVal, new: newVal })
 })
-watch(() => layout.value.files, (newVal, oldVal) => {
-  console.log('[Layout Debug] files changed', { old: oldVal, new: newVal })
+watch(() => layout.value.tabbedPane, (newVal, oldVal) => {
+  console.log('[Layout Debug] tabbedPane changed', { old: oldVal, new: newVal })
 })
-watch(() => layout.value.commits, (newVal, oldVal) => {
-  console.log('[Layout Debug] commits changed', { old: oldVal, new: newVal })
+watch(() => layout.value.tasksPane, (newVal, oldVal) => {
+  console.log('[Layout Debug] tasksPane changed', { old: oldVal, new: newVal })
 })
 watch(() => layout.value.terminal, (newVal, oldVal) => {
   console.log('[Layout Debug] terminal changed', { old: oldVal, new: newVal })
@@ -1876,7 +1861,7 @@ onUnmounted(() => {
             @click="isMobile && loadFile(null, 'editor')">
         <splitpanes ref="sidebarSplitpanesRef" horizontal class="default-theme h-full" @resize="handleSidebarResize">
           <!-- File tree -->
-          <pane :size="layout.changedFiles" :min-size="5" class="flex flex-col min-h-0 bg-main border-r border-main">
+          <pane :size="layout.filesPane" :min-size="5" class="flex flex-col min-h-0 bg-main border-r border-main">
             <div class="flex-[1] p-4 border-b border-main overflow-y-auto min-h-0">
               <div class="flex items-center justify-between mb-2">
                 <h3 class="text-sm font-semibold text-main">Files</h3>
@@ -1905,7 +1890,7 @@ onUnmounted(() => {
           </pane>
 
           <!-- Changes / Commits tabbed pane -->
-          <pane :size="layout.files + layout.commits" :min-size="15" class="flex flex-col min-h-0 bg-main border-r border-main">
+          <pane :size="layout.tabbedPane" :min-size="15" class="flex flex-col min-h-0 bg-main border-r border-main">
             <!-- Tab bar -->
             <div class="flex border-b border-main shrink-0">
               <button
@@ -2023,7 +2008,7 @@ onUnmounted(() => {
           </pane>
 
           <!-- Task List pane -->
-          <pane :size="25" :min-size="10" class="flex flex-col min-h-0 bg-main border-r border-main">
+          <pane :size="layout.tasksPane" :min-size="10" class="flex flex-col min-h-0 bg-main border-r border-main">
             <div class="p-4 flex-1 overflow-y-auto min-h-0">
               <div class="flex items-center justify-between mb-2">
                 <h3 class="text-sm font-semibold text-main">Tasks</h3>
@@ -2342,7 +2327,7 @@ onUnmounted(() => {
           <!-- Terminal pane -->
           <pane v-if="showTerminal && !showFileList" :size="isMobile ? 100 : layout.terminal" :min-size="isMobile ? 100 : 10" class="flex flex-col min-h-0">
             <div class="w-full bg-main border-l border-main flex-1 flex flex-col min-h-0">
-              <Terminal :task-id="taskId" />
+              <Terminal :key="taskId" :task-id="taskId" />
             </div>
           </pane>
         </splitpanes>
