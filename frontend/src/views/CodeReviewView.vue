@@ -5,7 +5,8 @@ import { useTheme } from '@/composables/useTheme'
 import { useConfirm } from '@/composables/useConfirm'
 import { useMainStore } from '@/store'
 import filesApi from '@/api/files'
-import tasksApi from '@/api/tasks'
+import tasksApi, { type Task } from '@/api/tasks'
+import projectsApi from '@/api/projects'
 import { gitApi, type CommitInfo, type CommitDiff, type PaginatedCommitsResponse } from '@/api/git'
 import { type ChangedFileInfo, type PaginatedChangedFilesResponse } from '@/api/files'
 import { isLanMode } from '@/api/client'
@@ -43,8 +44,15 @@ const { theme, cycleTheme } = useTheme()
 const { showConfirm } = useConfirm()
 const store = useMainStore()
 
-const taskId = computed(() => route.params.id as string)
+// New computed for projectId from route params
+const projectId = computed(() => route.params.id as string)
+const taskId = computed(() => route.query.task as string)
 const task = computed(() => store.currentTask)
+
+// Task list state (new)
+const tasks = ref<Task[]>([])
+const tasksLoading = ref(false)
+const activeTab = ref<'changes' | 'commits'>('changes')
 
 // Changed files
 const changedFiles = ref<ChangedFileInfo[]>([])
@@ -422,9 +430,7 @@ const loadLayout = () => {
 
 // Navigate back to tasks list with full page reload
 const goBackToTasks = () => {
-  if (store.currentProject?.id) {
-    window.location.href = `/projects/${store.currentProject.id}`
-  }
+  router.push('/projects')
 }
 
 // Check if device is mobile
@@ -505,10 +511,17 @@ watch(layout, (newLayout, oldLayout) => {
 }, { deep: true })
 
 // Reset to page 1 when task changes
-watch(taskId, () => {
+watch(taskId, async () => {
   currentPage.value = 1
   changedFilesPage.value = 1
-  loadCommits()
+  await loadTask()
+  await Promise.all([
+    loadChangedFiles(),
+    loadCommits(),
+    loadButtonStates(),
+    refreshStatus(),
+    loadFileTree()
+  ])
 })
 
 // Also watch individual layout properties to see which ones change
@@ -585,11 +598,16 @@ const loadTask = async () => {
   try {
     const taskData = await tasksApi.get(taskId.value)
     store.setCurrentTask(taskData)
-    // Set current project for navigation back to tasks
     store.setCurrentProject({ id: taskData.project_id })
+    // Also load all tasks for the sidebar list
+    tasksLoading.value = true
+    try {
+      tasks.value = await tasksApi.list(projectId.value)
+    } finally {
+      tasksLoading.value = false
+    }
   } catch (err: any) {
     console.error('Failed to load task:', err)
-    // Redirect to projects if task doesn't exist
     router.push('/projects')
   }
 }
@@ -1117,6 +1135,36 @@ const refreshStatus = async () => {
   } catch (err: any) {
     console.error('Failed to refresh status:', err)
   }
+}
+
+const switchTask = async (newTaskId: string) => {
+  if (newTaskId === taskId.value) return
+
+  // 1. Update URL without page reload
+  router.replace({ query: { task: newTaskId } })
+
+  // 2. Load new task data
+  const taskData = await tasksApi.get(newTaskId)
+  store.setCurrentTask(taskData)
+
+  // 3. Reload all dependent data in parallel
+  await Promise.all([
+    loadChangedFiles(),
+    loadCommits(true),
+    loadButtonStates(),
+    refreshStatus(),
+    loadFileTree()
+  ])
+
+  // 4. Reset editor state
+  currentFile.value = null
+  fileContent.value = ''
+  originalContent.value = ''
+  editorMode.value = 'editor'
+
+  // 5. Reset pagination
+  currentPage.value = 1
+  changedFilesPage.value = 1
 }
 
 const toggleDir = async (path: string) => {
@@ -1648,23 +1696,44 @@ const stopRefresh = () => {
 
 onMounted(async () => {
   console.log('[Layout Debug] onMounted started')
-  // Load task data first
-  await loadTask()
-  console.log('[Layout Debug] Task loaded, taskId:', taskId.value)
-  loadLayout()
-  console.log('[Layout Debug] Layout after loadLayout:', layout.value)
-
   checkMobile()
   window.addEventListener('resize', checkMobile)
   window.addEventListener('keydown', handleGlobalKeydown)
-  loadFileTree()
-  loadChangedFiles().then(() => {
-    initialLoading.value = false
-  })
-  loadCommits()       // Initial commits load
-  loadButtonStates()  // Initial button state load
-  refreshStatus()     // Initial status load
-  startRefresh()
+
+  // Load project
+  const project = await projectsApi.get(projectId.value)
+  store.setCurrentProject(project)
+
+  // Determine task: from URL query or default Direct task
+  let targetTaskId = route.query.task as string
+
+  if (!targetTaskId) {
+    // Auto-select: load tasks, find Direct task
+    tasksLoading.value = true
+    try {
+      tasks.value = await tasksApi.list(projectId.value)
+      const directTask = tasks.value.find(t => t.direct_on_branch)
+      const fallbackTask = tasks.value[0]
+      targetTaskId = directTask?.id || fallbackTask?.id
+      if (targetTaskId) {
+        router.replace({ query: { task: targetTaskId } })
+      }
+    } finally {
+      tasksLoading.value = false
+    }
+  }
+
+  if (targetTaskId) {
+    loadLayout()
+    await loadTask()
+    loadFileTree()
+    loadChangedFiles().then(() => { initialLoading.value = false })
+    loadCommits()
+    loadButtonStates()
+    refreshStatus()
+    startRefresh()
+  }
+
   console.log('[Layout Debug] onMounted completed')
 })
 
