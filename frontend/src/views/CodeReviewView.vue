@@ -2048,7 +2048,7 @@ onUnmounted(() => {
                 >
                   <span class="truncate flex-1">{{ task.name }}</span>
                   <span v-if="task.direct_on_branch" class="px-1 py-0.5 text-xs rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 shrink-0">Direct</span>
-                  <span v-else :class="task.task_status === 'running' ? 'text-green-600 dark:text-green-400' : 'text-gray-400'">
+                  <span :class="task.task_status === 'running' ? 'text-green-600 dark:text-green-400' : 'text-gray-400'">
                     {{ task.task_status === 'running' ? '🟢' : '⚪' }}
                   </span>
                 </div>
