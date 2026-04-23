@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import init_db, SessionLocal
 import asyncio
 from app.services.task_monitor_service import TaskMonitorService
-from app.routers import auth, projects, tasks, files, git, terminals, queues, command_presets, filesystem, symbols, global_terminal, tunnel, config, matrix
+from app.routers import auth, projects, tasks, files, git, terminals, queues, command_presets, filesystem, symbols, global_terminal, tunnel, config, matrix, search
 from app.websocket.terminal import get_websocket_terminal
 from app.websocket.manager import manager
 from app.auth import verify_token
@@ -125,6 +125,7 @@ app.include_router(symbols.router)
 app.include_router(global_terminal.router)
 app.include_router(tunnel.router)
 app.include_router(config.router)
+app.include_router(search.router)
 
 # Serve frontend static files if bundled/available
 # Mount assets directory for JS, CSS, images, etc.
@@ -144,16 +145,25 @@ monitor_service: TaskMonitorService = None
 
 
 async def monitor_tasks():
-    """Background task to monitor all task statuses"""
+    """Background task to monitor all task statuses.
+
+    check_all_tasks() runs in a thread pool so its synchronous
+    subprocess calls (tmux capture, git commands) never block the
+    asyncio event loop.
+    """
     global monitor_service
     from app.database import SessionLocal
     db = SessionLocal()
     try:
         monitor_service = TaskMonitorService()
+        # Store the main event loop so the thread-pool worker can
+        # schedule async callbacks (WebSocket broadcasts, delayed
+        # newline sends) back onto it.
+        monitor_service.set_main_loop(asyncio.get_running_loop())
         logger.info("Task monitor service initialized")
         while True:
             try:
-                monitor_service.check_all_tasks()
+                await asyncio.to_thread(monitor_service.check_all_tasks)
                 logger.debug("Task status check completed")
                 await asyncio.sleep(10)  # Poll every 10 seconds
             except Exception as e:
