@@ -3,6 +3,221 @@
 @tailwind utilities;
 
 /* ========================================
+   SEMANTIC COLOR VARIABLES FOR CODE REVIEW
+   ======================================== */
+
+:root {
+  /* Light theme (default) */
+  --conflict-bg: rgba(249, 115, 22, 0.08);
+  --conflict-border: rgba(249, 115, 22, 0.25);
+  --conflict-text: #ea580c;
+  --conflict-hover: rgba(249, 115, 22, 0.15);
+  --conflict-current-bg: rgba(59, 130, 246, 0.1);
+  --conflict-current-text: #2563eb;
+  --conflict-incoming-bg: rgba(34, 197, 94, 0.1);
+  --conflict-incoming-text: #16a34a;
+  --conflict-both-bg: rgba(168, 85, 247, 0.1);
+  --conflict-both-text: #7c3aed;
+  --conflict-glyph: #f97316;
+  --conflict-error-bg: rgba(239, 68, 68, 0.08);
+  --conflict-error-border: rgba(239, 68, 68, 0.25);
+  --conflict-error-text: #dc2626;
+
+  /* Symbol type colors */
+  --symbol-function: #795e26;
+  --symbol-class: #267f99;
+  --symbol-variable: #001080;
+  --symbol-import: #af00db;
+  --symbol-constant: #a31515;
+
+  /* Splitter / divider */
+  --splitter-color: var(--border-secondary);
+  --splitter-hover: var(--accent-color);
+  --splitter-active: var(--accent-hover);
+  --splitter-handle: rgba(255, 255, 255, 0.8);
+
+  /* Status badge colors */
+  --badge-added-bg: rgba(34, 197, 94, 0.12);
+  --badge-added-text: #16a34a;
+  --badge-modified-bg: rgba(234, 179, 8, 0.12);
+  --badge-modified-text: #ca8a04;
+  --badge-deleted-bg: rgba(239, 68, 68, 0.12);
+  --badge-deleted-text: #dc2626;
+  --badge-renamed-bg: rgba(59, 130, 246, 0.12);
+  --badge-renamed-text: #2563eb;
+  --badge-copied-bg: rgba(168, 85, 247, 0.12);
+  --badge-copied-text: #7c3aed;
+  --badge-untracked-bg: rgba(249, 115, 22, 0.12);
+  --badge-untracked-text: #ea580c;
+  --badge-typed-bg: rgba(107, 114, 128, 0.12);
+  --badge-typed-text: #6b7280;
+}
+
+/* Light theme */
+.theme-light {
+  --conflict-bg: rgba(249, 115, 22, 0.08);
+  --conflict-border: rgba(249, 115, 22, 0.25);
+  --conflict-text: #ea580c;
+  --conflict-hover: rgba(249, 115, 22, 0.15);
+  --conflict-current-bg: rgba(59, 130, 246, 0.1);
+  --conflict-current-text: #2563eb;
+  --conflict-incoming-bg: rgba(34, 197, 94, 0.1);
+  --conflict-incoming-text: #16a34a;
+  --conflict-both-bg: rgba(168, 85, 247, 0.1);
+  --conflict-both-text: #7c3aed;
+  --conflict-glyph: #f97316;
+  --conflict-error-bg: rgba(239, 68, 68, 0.08);
+  --conflict-error-border: rgba(239, 68, 68, 0.25);
+  --conflict-error-text: #dc2626;
+  --symbol-function: #795e26;
+  --symbol-class: #267f99;
+  --symbol-variable: #001080;
+  --symbol-import: #af00db;
+  --symbol-constant: #a31515;
+  --splitter-color: var(--border-secondary);
+  --splitter-hover: var(--accent-color);
+  --splitter-active: var(--accent-hover);
+  --splitter-handle: rgba(255, 255, 255, 0.8);
+  --badge-added-bg: rgba(34, 197, 94, 0.12);
+  --badge-added-text: #16a34a;
+  --badge-modified-bg: rgba(234, 179, 8, 0.12);
+  --badge-modified-text: #ca8a04;
+  --badge-deleted-bg: rgba(239, 68, 68, 0.12);
+  --badge-deleted-text: #dc2626;
+  --badge-renamed-bg: rgba(59, 130, 246, 0.12);
+  --badge-renamed-text: #2563eb;
+  --badge-copied-bg: rgba(168, 85, 247, 0.12);
+  --badge-copied-text: #7c3aed;
+  --badge-untracked-bg: rgba(249, 115, 22, 0.12);
+  --badge-untracked-text: #ea580c;
+  --badge-typed-bg: rgba(107, 114, 128, 0.12);
+  --badge-typed-text: #6b7280;
+}
+
+/* Dark theme */
+.theme-dark {
+  --conflict-bg: rgba(249, 115, 22, 0.12);
+  --conflict-border: rgba(249, 115, 22, 0.3);
+  --conflict-text: #fb923c;
+  --conflict-hover: rgba(249, 115, 22, 0.2);
+  --conflict-current-bg: rgba(59, 130, 246, 0.15);
+  --conflict-current-text: #60a5fa;
+  --conflict-incoming-bg: rgba(34, 197, 94, 0.15);
+  --conflict-incoming-text: #4ade80;
+  --conflict-both-bg: rgba(168, 85, 247, 0.15);
+  --conflict-both-text: #c084fc;
+  --conflict-glyph: #fb923c;
+  --conflict-error-bg: rgba(248, 81, 73, 0.12);
+  --conflict-error-border: rgba(248, 81, 73, 0.3);
+  --conflict-error-text: #f87171;
+  --symbol-function: #e3b341;
+  --symbol-class: #79c0ff;
+  --symbol-variable: #ffa657;
+  --symbol-import: #d2a8ff;
+  --symbol-constant: #ff7b72;
+  --splitter-color: var(--border-secondary);
+  --splitter-hover: var(--accent-color);
+  --splitter-active: var(--accent-hover);
+  --splitter-handle: rgba(255, 255, 255, 0.8);
+  --badge-added-bg: rgba(63, 185, 80, 0.15);
+  --badge-added-text: #3fb950;
+  --badge-modified-bg: rgba(234, 179, 8, 0.15);
+  --badge-modified-text: #facc15;
+  --badge-deleted-bg: rgba(248, 81, 73, 0.15);
+  --badge-deleted-text: #f85149;
+  --badge-renamed-bg: rgba(59, 130, 246, 0.15);
+  --badge-renamed-text: #58a6ff;
+  --badge-copied-bg: rgba(168, 85, 247, 0.15);
+  --badge-copied-text: #c084fc;
+  --badge-untracked-bg: rgba(249, 115, 22, 0.15);
+  --badge-untracked-text: #fb923c;
+  --badge-typed-bg: rgba(110, 118, 129, 0.15);
+  --badge-typed-text: #8b949e;
+}
+
+/* Green theme */
+.theme-green {
+  --conflict-bg: rgba(45, 90, 61, 0.1);
+  --conflict-border: rgba(45, 90, 61, 0.25);
+  --conflict-text: #2d5a3d;
+  --conflict-hover: rgba(45, 90, 61, 0.18);
+  --conflict-current-bg: rgba(59, 130, 246, 0.1);
+  --conflict-current-text: #1d4ed8;
+  --conflict-incoming-bg: rgba(34, 197, 94, 0.1);
+  --conflict-incoming-text: #15803d;
+  --conflict-both-bg: rgba(168, 85, 247, 0.1);
+  --conflict-both-text: #7c3aed;
+  --conflict-glyph: #2d5a3d;
+  --conflict-error-bg: rgba(180, 50, 50, 0.1);
+  --conflict-error-border: rgba(180, 50, 50, 0.25);
+  --conflict-error-text: #b83232;
+  --symbol-function: #795e26;
+  --symbol-class: #267f99;
+  --symbol-variable: #001080;
+  --symbol-import: #af00db;
+  --symbol-constant: #a31515;
+  --splitter-color: var(--border-secondary);
+  --splitter-hover: var(--accent-color);
+  --splitter-active: var(--accent-hover);
+  --splitter-handle: rgba(255, 255, 255, 0.8);
+  --badge-added-bg: rgba(34, 197, 94, 0.15);
+  --badge-added-text: #16a34a;
+  --badge-modified-bg: rgba(234, 179, 8, 0.15);
+  --badge-modified-text: #ca8a04;
+  --badge-deleted-bg: rgba(239, 68, 68, 0.15);
+  --badge-deleted-text: #dc2626;
+  --badge-renamed-bg: rgba(59, 130, 246, 0.15);
+  --badge-renamed-text: #2563eb;
+  --badge-copied-bg: rgba(168, 85, 247, 0.15);
+  --badge-copied-text: #7c3aed;
+  --badge-untracked-bg: rgba(249, 115, 22, 0.15);
+  --badge-untracked-text: #ea580c;
+  --badge-typed-bg: rgba(107, 114, 128, 0.15);
+  --badge-typed-text: #6b7280;
+}
+
+/* Parchment theme */
+.theme-parchment {
+  --conflict-bg: rgba(92, 77, 58, 0.1);
+  --conflict-border: rgba(92, 77, 58, 0.25);
+  --conflict-text: #9a7209;
+  --conflict-hover: rgba(92, 77, 58, 0.18);
+  --conflict-current-bg: rgba(59, 130, 246, 0.1);
+  --conflict-current-text: #1d4ed8;
+  --conflict-incoming-bg: rgba(34, 197, 94, 0.1);
+  --conflict-incoming-text: #15803d;
+  --conflict-both-bg: rgba(168, 85, 247, 0.1);
+  --conflict-both-text: #7c3aed;
+  --conflict-glyph: #b8860b;
+  --conflict-error-bg: rgba(160, 60, 60, 0.1);
+  --conflict-error-border: rgba(160, 60, 60, 0.25);
+  --conflict-error-text: #a03030;
+  --symbol-function: #795e26;
+  --symbol-class: #267f99;
+  --symbol-variable: #001080;
+  --symbol-import: #af00db;
+  --symbol-constant: #a31515;
+  --splitter-color: var(--border-secondary);
+  --splitter-hover: var(--accent-color);
+  --splitter-active: var(--accent-hover);
+  --splitter-handle: rgba(255, 255, 255, 0.8);
+  --badge-added-bg: rgba(34, 197, 94, 0.15);
+  --badge-added-text: #16a34a;
+  --badge-modified-bg: rgba(234, 179, 8, 0.15);
+  --badge-modified-text: #ca8a04;
+  --badge-deleted-bg: rgba(239, 68, 68, 0.15);
+  --badge-deleted-text: #dc2626;
+  --badge-renamed-bg: rgba(59, 130, 246, 0.15);
+  --badge-renamed-text: #2563eb;
+  --badge-copied-bg: rgba(168, 85, 247, 0.15);
+  --badge-copied-text: #7c3aed;
+  --badge-untracked-bg: rgba(249, 115, 22, 0.15);
+  --badge-untracked-text: #ea580c;
+  --badge-typed-bg: rgba(107, 114, 128, 0.15);
+  --badge-typed-text: #6b7280;
+}
+
+/* ========================================
    THEME CSS VARIABLES
    ======================================== */
 
@@ -88,6 +303,11 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Remove focus outline from mouse-clicked buttons, keep for keyboard */
+  button:focus:not(:focus-visible) {
+    outline: none;
   }
 
   /* Dark mode base styles */

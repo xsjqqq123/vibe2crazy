@@ -1,0 +1,14 @@
+[Unit]
+Description=Start vibe2crazy as Service(cp this to /etc/systemd/system/)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/vibe2crazy/vibe2crazy
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/opt/vibe2crazy
+User=xusongjie
+
+[Install]
+WantedBy=multi-user.target

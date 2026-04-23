@@ -32,6 +32,7 @@ const xterm = ref<XTerminal | null>(null)
 const fitAddon = ref<FitAddon | null>(null)
 const resizeObserver = ref<ResizeObserver | null>(null)
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+let initialResizeTimer: ReturnType<typeof setTimeout> | null = null
 let wheelHandler: ((e: WheelEvent) => void) | null = null
 let connectTimeout: ReturnType<typeof setTimeout> | null = null
 let unsubscribeNetwork: (() => void) | null = null
@@ -234,6 +235,11 @@ const connect = () => {
     ws.value.onopen = () => {
       connected.value = true
       connecting.value = false
+      // Send pending resize if any
+      if (pendingResize) {
+        ws.value?.send(JSON.stringify({ type: 'resize', cols: pendingResize.cols, rows: pendingResize.rows }))
+        pendingResize = null
+      }
       if (xterm.value) {
         xterm.value.clear()
         resize(xterm.value.cols, xterm.value.rows)
@@ -332,6 +338,9 @@ let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
 // API Error auto-continue watcher
 let apiErrorTimer: ReturnType<typeof setTimeout> | null = null
 
+// Pending resize (sent when connection opens)
+let pendingResize: { cols: number; rows: number } | null = null
+
 const send = (data: string) => {
   // Only send input when this terminal is selected
   if (!props.isSelected) return
@@ -358,6 +367,9 @@ const sendRaw = (message: object) => {
 const resize = (cols: number, rows: number) => {
   if (ws.value && ws.value.readyState === WebSocket.OPEN) {
     ws.value.send(JSON.stringify({ type: 'resize', cols, rows }))
+  } else {
+    // Store for sending when connection opens
+    pendingResize = { cols, rows }
   }
 }
 
@@ -468,20 +480,35 @@ const initTerminal = () => {
     }
   })
 
-  // Send initial dimensions to backend
-  fitAddon.value.fit()
-  if (xterm.value) {
-    resize(xterm.value.cols, xterm.value.rows)
-  }
+  // Wait for container size to stabilize (2s) before sending initial resize
+  let lastInitialDims = { cols: 0, rows: 0 }
 
-  // Handle terminal resize events
+  const tryInitialResize = () => {
+    if (!fitAddon.value || !xterm.value) return
+    fitAddon.value.fit()
+    const { cols, rows } = xterm.value
+    if (cols === lastInitialDims.cols && rows === lastInitialDims.rows) {
+      console.log(`[MatrixTerminal] Initial resize (stable): ${cols}x${rows}`)
+      resize(cols, rows)
+      initialResizeDone = true
+    } else {
+      lastInitialDims = { cols, rows }
+      initialResizeTimer = setTimeout(tryInitialResize, 2000)
+    }
+  }
+  lastInitialDims = { cols: xterm.value.cols, rows: xterm.value.rows }
+  initialResizeTimer = setTimeout(tryInitialResize, 2000)
+
+  // Handle terminal resize events (after initial stabilization)
+  let initialResizeDone = false
   xterm.value.onResize(({ cols, rows }) => {
+    if (!initialResizeDone) return
     resize(cols, rows)
   })
 
   // Clear and show connecting message
   xterm.value.clear()
-  xterm.value.writeln('\x1b[33mWaiting for network detection...\x1b[0m')
+  xterm.value.writeln('\x1b[33mConnecting...\x1b[0m')
 
   // Setup network change listener
   unsubscribeNetwork = wsNetworkManager.onWsBaseChange((_base: string, type: AddressType) => {
@@ -507,14 +534,8 @@ const initTerminal = () => {
     }
   })
 
-  // Delayed connection (3 seconds to allow network detection)
-  connectTimeout = setTimeout(() => {
-    if (xterm.value) {
-      xterm.value.clear()
-      xterm.value.writeln('\x1b[33mConnecting...\x1b[0m')
-    }
-    connect()
-  }, 3000)
+  // Connect immediately - network detection runs in background
+  connect()
 }
 
 const handleResize = () => {
@@ -576,6 +597,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
+  if (initialResizeTimer) clearTimeout(initialResizeTimer)
   if (reconnectTimeout) clearTimeout(reconnectTimeout)
   if (apiErrorTimer) clearTimeout(apiErrorTimer)
 

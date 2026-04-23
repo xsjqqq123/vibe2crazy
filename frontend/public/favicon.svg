@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background rounded square -->
+  <rect x="2" y="2" width="28" height="28" rx="6" fill="url(#grad1)"/>
+
+  <!-- V shape representing "Vibe" with code bracket style -->
+  <path d="M8 10L16 24L24 10" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Left code bracket < -->
+  <path d="M6 14L3 16L6 18" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
+
+  <!-- Right code bracket > -->
+  <path d="M26 14L29 16L26 18" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
+
+  <!-- Gradient definition -->
+  <defs>
+    <linearGradient id="grad1" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+</svg>

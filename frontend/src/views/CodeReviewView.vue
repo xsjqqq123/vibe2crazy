@@ -628,6 +628,12 @@ const loadFileTree = async () => {
 
 const handleSearchSelect = (filePath: string, lineNumber: number) => {
   loadFile(filePath)
+  // Jump to line after editor loads
+  nextTick(() => {
+    if (editorRef.value) {
+      editorRef.value.goToLine(lineNumber)
+    }
+  })
 }
 
 const loadTask = async (taskIdOverride?: string) => {

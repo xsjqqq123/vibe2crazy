@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import tunnelApi, { TunnelStatus } from '@/api/tunnel'
-import { isLanMode } from '@/api/client'
+
+const POLL_DURATION = 30000 // 30秒后停止轮询
 
 export function useTunnel() {
   const status = ref<string>('disabled')
@@ -11,9 +12,9 @@ export function useTunnel() {
   const loading = ref(false)
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
+  let stopTimer: ReturnType<typeof setTimeout> | null = null
 
   const fetchStatus = async () => {
-    if (!isLanMode()) return  // 非局域网跳过本次轮询
     try {
       const data: TunnelStatus = await tunnelApi.getStatus()
       status.value = data.status
@@ -26,16 +27,32 @@ export function useTunnel() {
     }
   }
 
-  const startPolling = (intervalMs: number = 5000) => {
-    if (pollInterval) return
-    pollInterval = setInterval(fetchStatus, intervalMs)
-  }
-
-  const stopPolling = () => {
+  const clearTimers = () => {
     if (pollInterval) {
       clearInterval(pollInterval)
       pollInterval = null
     }
+    if (stopTimer) {
+      clearTimeout(stopTimer)
+      stopTimer = null
+    }
+  }
+
+  const startPolling = (intervalMs: number = 5000) => {
+    clearTimers()
+    fetchStatus() // 立即获取一次
+    pollInterval = setInterval(fetchStatus, intervalMs)
+    // 30秒后自动停止
+    stopTimer = setTimeout(() => {
+      if (pollInterval) {
+        clearInterval(pollInterval)
+        pollInterval = null
+      }
+    }, POLL_DURATION)
+  }
+
+  const stopPolling = () => {
+    clearTimers()
   }
 
   const saveToken = async (newToken: string, useTls: boolean = true, verifyTls: boolean = false) => {
@@ -47,7 +64,7 @@ export function useTunnel() {
         verify_tls: verifyTls
       })
       token.value = newToken
-      await fetchStatus()
+      startPolling() // 保存后重新开始轮询
       return { success: true }
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to save token' }
@@ -60,7 +77,7 @@ export function useTunnel() {
     loading.value = true
     try {
       await tunnelApi.start()
-      await fetchStatus()
+      startPolling() // 启动后重新开始轮询
       return { success: true }
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to start tunnel' }
@@ -73,7 +90,7 @@ export function useTunnel() {
     loading.value = true
     try {
       await tunnelApi.stop()
-      await fetchStatus()
+      startPolling() // 停止后重新开始轮询以更新状态
       return { success: true }
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to stop tunnel' }
@@ -93,7 +110,6 @@ export function useTunnel() {
   }
 
   onMounted(() => {
-    fetchStatus()
     startPolling()
   })
 

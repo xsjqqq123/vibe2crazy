@@ -1,0 +1,86 @@
+- generic [ref=e835]:
+  - banner [ref=e836]:
+    - generic [ref=e837]:
+      - generic [ref=e838]:
+        - button [ref=e839] [cursor=pointer]:
+          - img [ref=e840]
+        - heading "Direct" [level=1] [ref=e842]
+      - generic [ref=e843]:
+        - button "Terminal" [ref=e844] [cursor=pointer]:
+          - img [ref=e845]
+        - button "Cycle theme" [ref=e847] [cursor=pointer]:
+          - img [ref=e848]
+        - button "Global Terminal" [ref=e850] [cursor=pointer]:
+          - img [ref=e851]
+        - button "Settings" [ref=e854] [cursor=pointer]:
+          - img [ref=e855]
+  - generic [ref=e859]:
+    - img [ref=e860]
+    - generic [ref=e862]: This task works directly on main branch.
+  - generic [ref=e863]:
+    - generic [ref=e865]:
+      - generic [ref=e867]:
+        - generic [ref=e868]:
+          - heading "Files" [level=3] [ref=e869]
+          - button "Refresh" [ref=e870] [cursor=pointer]:
+            - img [ref=e871]
+        - generic [ref=e875] [cursor=pointer]:
+          - generic [ref=e876]: 📄
+          - generic [ref=e877]: test.txt
+      - generic [ref=e879]:
+        - generic [ref=e880]:
+          - button "Changes (0)" [ref=e881] [cursor=pointer]
+          - button "Commits" [ref=e882] [cursor=pointer]
+        - generic [ref=e884]:
+          - generic [ref=e885]:
+            - heading "Changes" [level=3] [ref=e886]
+            - button "Accept" [ref=e887] [cursor=pointer]:
+              - img [ref=e888]
+          - generic [ref=e890]: No changes detected
+      - generic [ref=e893]:
+        - generic [ref=e894]:
+          - heading "Tasks" [level=3] [ref=e895]
+          - button "+ New" [ref=e896] [cursor=pointer]
+        - generic [ref=e898] [cursor=pointer]:
+          - generic [ref=e899]: Direct
+          - generic [ref=e900]: Direct
+    - generic [ref=e903]:
+      - main [ref=e905]:
+        - generic [ref=e907]: Select a file to edit
+      - generic [ref=e912]:
+        - generic [ref=e916]: Disconnected
+        - generic [ref=e920]:
+          - textbox "Terminal input" [ref=e921]
+          - generic:
+            - generic:
+              - generic: Waiting for network detection...
+        - generic [ref=e922]:
+          - button "Page Up" [disabled] [ref=e923]:
+            - img [ref=e924]
+          - button "Up arrow" [disabled] [ref=e927]:
+            - img [ref=e928]
+          - button "Page Down" [disabled] [ref=e930]:
+            - img [ref=e931]
+          - button "A" [disabled] [ref=e934]
+          - button "B" [disabled] [ref=e935]
+          - button "C" [disabled] [ref=e936]
+          - button "D" [disabled] [ref=e937]
+          - button "ENTER" [disabled] [ref=e938]
+          - button "TAB" [disabled] [ref=e939]
+          - button "GO" [disabled] [ref=e940]
+          - button "ABC" [disabled] [ref=e941]
+          - button "Left arrow" [disabled] [ref=e942]:
+            - img [ref=e943]
+          - button "Down arrow" [disabled] [ref=e945]:
+            - img [ref=e946]
+          - button "Right arrow" [disabled] [ref=e948]:
+            - img [ref=e949]
+          - button "1" [disabled] [ref=e951]
+          - button "2" [disabled] [ref=e952]
+          - button "3" [disabled] [ref=e953]
+          - button "4" [disabled] [ref=e954]
+          - button "UPLOAD" [disabled] [ref=e955]
+          - button "LOG" [disabled] [ref=e956]:
+            - generic [ref=e957]: LOG
+          - button "CMD" [disabled] [ref=e958]
+          - button "TODO" [disabled] [ref=e959]

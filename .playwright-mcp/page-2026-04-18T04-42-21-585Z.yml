@@ -1,0 +1,56 @@
+- generic [ref=e750]:
+  - banner [ref=e751]:
+    - generic [ref=e752]:
+      - generic [ref=e753]:
+        - heading "Vibe2Crazy" [level=1] [ref=e754]
+        - paragraph [ref=e755]: Projects
+      - generic [ref=e756]:
+        - button "Check for Updates" [ref=e757] [cursor=pointer]:
+          - img [ref=e758]
+        - button "Cycle theme" [ref=e760] [cursor=pointer]:
+          - img [ref=e761]
+        - button "Global Terminal" [ref=e763] [cursor=pointer]:
+          - img [ref=e764]
+        - button "Terminal Matrix" [ref=e767] [cursor=pointer]:
+          - img [ref=e768]
+        - button "Logout" [ref=e773] [cursor=pointer]:
+          - img [ref=e774]
+  - generic [ref=e778]:
+    - generic [ref=e779]:
+      - generic [ref=e780]:
+        - generic [ref=e782]: Remote Access
+        - generic [ref=e783]: (Disconnected)
+      - link "Get token" [ref=e784] [cursor=pointer]:
+        - /url: http://localhost
+    - button "Configure" [ref=e785] [cursor=pointer]
+  - main [ref=e786]:
+    - generic [ref=e787]:
+      - heading "Your Projects" [level=2] [ref=e788]
+      - button "+ New Project" [active] [ref=e789] [cursor=pointer]
+    - generic [ref=e792] [cursor=pointer]:
+      - generic [ref=e793]:
+        - heading "Test Commit Diff" [level=3] [ref=e794]
+        - paragraph [ref=e795]: /tmp/test-commit-diff
+        - paragraph [ref=e796]: "Branch: master"
+      - button [ref=e797]:
+        - img [ref=e798]
+  - generic [ref=e801]:
+    - heading "Create New Project" [level=3] [ref=e802]
+    - generic [ref=e803]:
+      - generic [ref=e804]:
+        - generic [ref=e805]: Project Name *
+        - textbox "My Project" [ref=e806]
+      - generic [ref=e807]:
+        - generic [ref=e808]: Git Repository Path *
+        - textbox "/path/to/repo" [ref=e810]
+        - paragraph [ref=e811]: Path to git repository - branch will be auto-detected when path is entered
+      - generic [ref=e812]:
+        - generic [ref=e813]: Main Branch
+        - generic [ref=e814]:
+          - combobox "main" [ref=e815]
+          - button "Select branch" [disabled] [ref=e816]:
+            - img [ref=e817]
+        - paragraph [ref=e819]: Auto-detected from repository, or select from dropdown
+      - generic [ref=e820]:
+        - button "Cancel" [ref=e821] [cursor=pointer]
+        - button "Create" [ref=e822] [cursor=pointer]

@@ -1,0 +1,102 @@
+- generic [ref=e153]:
+  - banner [ref=e154]:
+    - generic [ref=e155]:
+      - generic [ref=e156]:
+        - button [ref=e157] [cursor=pointer]:
+          - img [ref=e158]
+        - heading "test-api-error" [level=1] [ref=e160]
+      - generic [ref=e161]:
+        - button "Terminal" [ref=e162] [cursor=pointer]:
+          - img [ref=e163]
+        - button "Cycle theme" [ref=e165] [cursor=pointer]:
+          - img [ref=e166]
+        - button "Global Terminal" [ref=e168] [cursor=pointer]:
+          - img [ref=e169]
+        - button "Settings" [ref=e174] [cursor=pointer]:
+          - img [ref=e175]
+  - generic [ref=e178]:
+    - generic [ref=e180]:
+      - generic [ref=e182]:
+        - generic [ref=e183]:
+          - heading "Files" [level=3] [ref=e184]
+          - button "Refresh" [ref=e185] [cursor=pointer]:
+            - img [ref=e186]
+        - generic [ref=e189]: No files found (rootPaths empty)
+      - generic [ref=e192]:
+        - generic [ref=e193]:
+          - heading "Changes" [level=3] [ref=e194]
+          - button "Accept" [ref=e195] [cursor=pointer]:
+            - img [ref=e196]
+        - generic [ref=e198]: No changes detected
+      - generic [ref=e201]:
+        - generic [ref=e202]:
+          - heading "Commits" [level=3] [ref=e203]
+          - button "Merge" [ref=e205] [cursor=pointer]:
+            - img [ref=e206]
+        - generic [ref=e209]: No commits yet
+    - generic [ref=e212]:
+      - main [ref=e214]:
+        - generic [ref=e216]: Select a file to edit
+      - generic [ref=e221]:
+        - generic [ref=e223]:
+          - generic [ref=e225]: Connected
+          - generic [ref=e271]: LAN
+        - generic [ref=e229]:
+          - textbox "Terminal input" [active] [ref=e230]
+          - generic:
+            - generic:
+              - generic: $ cd /tmp/test-api-error-worktrees/test
+            - generic:
+              - generic: "-api-error-49de3ddc"
+            - generic:
+              - generic: "$ echo \"API Error: something wrong happ"
+            - generic:
+              - generic: ened"
+            - generic:
+              - generic: "API Error: something wrong happened"
+            - generic:
+              - generic: $ continue
+            - generic:
+              - generic: "-bash: continue:"
+              - generic: 仅在
+              - generic: "\"for\""
+              - generic: 、
+              - generic: "\"while\""
+              - generic: 或者
+            - generic:
+              - generic: "\"until\""
+              - generic: 循环中有意义
+            - generic:
+              - generic: $
+        - generic [ref=e231]:
+          - generic [ref=e232]:
+            - button "Page Up - Enter scroll mode or scroll up" [ref=e233] [cursor=pointer]:
+              - img [ref=e234]
+            - button "Up arrow" [ref=e237] [cursor=pointer]:
+              - img [ref=e238]
+            - button "Page Down - Scroll down" [ref=e240] [cursor=pointer]:
+              - img [ref=e241]
+            - button "A" [ref=e244] [cursor=pointer]
+            - button "B" [ref=e245] [cursor=pointer]
+            - button "C" [ref=e246] [cursor=pointer]
+            - button "D" [ref=e247] [cursor=pointer]
+            - button "ENTER" [ref=e248] [cursor=pointer]
+            - button "TAB" [ref=e249] [cursor=pointer]
+            - button "GO" [ref=e250] [cursor=pointer]
+            - button "ABC" [ref=e251] [cursor=pointer]
+          - generic [ref=e252]:
+            - button "Left arrow" [ref=e253] [cursor=pointer]:
+              - img [ref=e254]
+            - button "Down arrow" [ref=e256] [cursor=pointer]:
+              - img [ref=e257]
+            - button "Right arrow" [ref=e259] [cursor=pointer]:
+              - img [ref=e260]
+            - button "1" [ref=e262] [cursor=pointer]
+            - button "2" [ref=e263] [cursor=pointer]
+            - button "3" [ref=e264] [cursor=pointer]
+            - button "4" [ref=e265] [cursor=pointer]
+            - button "UPLOAD" [ref=e266] [cursor=pointer]
+            - button "LOG" [ref=e267] [cursor=pointer]:
+              - generic [ref=e268]: LOG
+            - button "CMD" [ref=e269] [cursor=pointer]
+            - button "TODO" [ref=e270] [cursor=pointer]

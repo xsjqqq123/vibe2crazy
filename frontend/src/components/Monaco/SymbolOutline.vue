@@ -408,8 +408,10 @@ defineExpose({
   user-select: none;
 }
 
-.outline-header:hover {
-  background: var(--bg-secondary);
+@media (hover: hover) {
+  .outline-header:hover {
+    background: var(--bg-secondary);
+  }
 }
 
 .outline-toggle {
@@ -470,10 +472,12 @@ defineExpose({
   touch-action: manipulation;
 }
 
-.outline-next:hover {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
-  color: white;
+@media (hover: hover) {
+  .outline-next:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+  }
 }
 
 .outline-content {
@@ -504,8 +508,8 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fee2e2;
-  color: #dc2626;
+  background: var(--conflict-error-bg);
+  color: var(--conflict-error-text);
   padding: 4px 8px;
   border-radius: 4px;
   margin-bottom: 8px;
@@ -515,7 +519,7 @@ defineExpose({
 .error-dismiss {
   background: none;
   border: none;
-  color: #dc2626;
+  color: var(--conflict-error-text);
   cursor: pointer;
   font-size: 14px;
   padding: 0 4px;
@@ -548,16 +552,18 @@ defineExpose({
   touch-action: manipulation;
 }
 
-.symbol-tag:hover {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
-  color: white;
-}
+@media (hover: hover) {
+  .symbol-tag:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+  }
 
-.symbol-tag:hover .symbol-icon,
-.symbol-tag:hover .symbol-name,
-.symbol-tag:hover .symbol-line {
-  color: white;
+  .symbol-tag:hover .symbol-icon,
+  .symbol-tag:hover .symbol-name,
+  .symbol-tag:hover .symbol-line {
+    color: white;
+  }
 }
 
 .symbol-tag.is-active {
@@ -609,8 +615,10 @@ defineExpose({
   user-select: none;
 }
 
-.preview-header:hover {
-  background: var(--bg-secondary);
+@media (hover: hover) {
+  .preview-header:hover {
+    background: var(--bg-secondary);
+  }
 }
 
 .preview-toggle {
@@ -669,7 +677,7 @@ defineExpose({
 }
 
 .preview-error {
-  color: #dc2626;
+  color: var(--conflict-error-text);
 }
 
 .similar-symbols {
@@ -690,9 +698,11 @@ defineExpose({
   font-family: monospace;
 }
 
-.similar-btn:hover {
-  background: var(--accent-color);
-  color: white;
+@media (hover: hover) {
+  .similar-btn:hover {
+    background: var(--accent-color);
+    color: white;
+  }
 }
 
 /* Preview snippet */
@@ -795,8 +805,10 @@ defineExpose({
   text-align: left;
 }
 
-.matches-expand-btn:hover {
-  color: var(--accent-color);
+@media (hover: hover) {
+  .matches-expand-btn:hover {
+    color: var(--accent-color);
+  }
 }
 
 .match-compact-btn {
@@ -813,15 +825,19 @@ defineExpose({
   touch-action: manipulation;
 }
 
-.match-compact-btn:hover {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
-  color: white;
+@media (hover: hover) {
+  .match-compact-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+  }
 }
 
-.match-compact-btn:hover .match-kind-small,
-.match-compact-btn:hover .match-file-small {
-  color: white;
+@media (hover: hover) {
+  .match-compact-btn:hover .match-kind-small,
+  .match-compact-btn:hover .match-file-small {
+    color: white;
+  }
 }
 
 .match-compact-btn.is-current {
@@ -847,25 +863,25 @@ defineExpose({
   color: var(--text-primary);
 }
 
-/* Symbol type colors - default (light) theme */
+/* Symbol type colors - theme-aware */
 .symbol-function {
-  color: #795e26;
+  color: var(--symbol-function);
 }
 
 .symbol-class {
-  color: #267f99;
+  color: var(--symbol-class);
 }
 
 .symbol-variable {
-  color: #001080;
+  color: var(--symbol-variable);
 }
 
 .symbol-import {
-  color: #af00db;
+  color: var(--symbol-import);
 }
 
 .symbol-constant {
-  color: #a31515;
+  color: var(--symbol-constant);
 }
 
 .is-collapsed .outline-content {

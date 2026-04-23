@@ -1,0 +1,38 @@
+- generic [ref=e89]:
+  - banner [ref=e90]:
+    - generic [ref=e91]:
+      - generic [ref=e92]:
+        - button [ref=e93] [cursor=pointer]:
+          - img [ref=e94]
+        - generic [ref=e96]:
+          - heading "Test API Error" [level=1] [ref=e97]
+          - paragraph [ref=e98]: Tasks
+      - generic [ref=e99]:
+        - button "Cycle theme" [ref=e100] [cursor=pointer]:
+          - img [ref=e101]
+        - button "Global Terminal" [ref=e103] [cursor=pointer]:
+          - img [ref=e104]
+        - button "Logout" [ref=e109] [cursor=pointer]:
+          - img [ref=e110]
+  - main [ref=e112]:
+    - generic [ref=e113]:
+      - heading "Tasks" [level=2] [ref=e114]
+      - button "+ New Task" [ref=e115] [cursor=pointer]
+    - generic [ref=e116]:
+      - paragraph [ref=e117]: No tasks yet
+      - button "Create your first task" [active] [ref=e118] [cursor=pointer]
+  - generic [ref=e120]:
+    - heading "Create New Task" [level=3] [ref=e121]
+    - generic [ref=e122]:
+      - generic [ref=e123]:
+        - generic [ref=e124]: Task Name *
+        - textbox "Implement feature X" [ref=e125]
+      - generic [ref=e126]:
+        - checkbox "Directly on the branch Work directly on main branch, no worktree created, merge not supported." [ref=e127]
+        - generic [ref=e128]:
+          - text: Directly on the branch
+          - text: Work directly on main branch, no worktree created, merge not supported.
+      - generic [ref=e129]:
+        - button "Cancel" [ref=e130] [cursor=pointer]
+        - button "Create" [ref=e131] [cursor=pointer]
+    - paragraph [ref=e132]: A new Git worktree and tmux session will be created for this task.

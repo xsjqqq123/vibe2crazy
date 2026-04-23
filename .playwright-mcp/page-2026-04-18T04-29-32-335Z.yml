@@ -1,0 +1,36 @@
+- generic [ref=e54]:
+  - banner [ref=e55]:
+    - generic [ref=e56]:
+      - generic [ref=e57]:
+        - heading "Vibe2Crazy" [level=1] [ref=e58]
+        - paragraph [ref=e59]: Projects
+      - generic [ref=e60]:
+        - button "Check for Updates" [ref=e61] [cursor=pointer]:
+          - img [ref=e62]
+        - button "Cycle theme" [ref=e64] [cursor=pointer]:
+          - img [ref=e65]
+        - button "Global Terminal" [ref=e67] [cursor=pointer]:
+          - img [ref=e68]
+        - button "Terminal Matrix" [ref=e71] [cursor=pointer]:
+          - img [ref=e72]
+        - button "Logout" [ref=e77] [cursor=pointer]:
+          - img [ref=e78]
+  - generic [ref=e82]:
+    - generic [ref=e83]:
+      - generic [ref=e84]:
+        - generic [ref=e86]: Remote Access
+        - generic [ref=e87]: (Disconnected)
+      - link "Get token" [ref=e88] [cursor=pointer]:
+        - /url: http://localhost
+    - button "Configure" [ref=e89] [cursor=pointer]
+  - main [ref=e90]:
+    - generic [ref=e91]:
+      - heading "Your Projects" [level=2] [ref=e92]
+      - button "+ New Project" [ref=e93] [cursor=pointer]
+    - generic [ref=e96] [cursor=pointer]:
+      - generic [ref=e97]:
+        - heading "Test Commit Diff" [level=3] [ref=e98]
+        - paragraph [ref=e99]: /tmp/test-commit-diff
+        - paragraph [ref=e100]: "Branch: master"
+      - button [ref=e101]:
+        - img [ref=e102]

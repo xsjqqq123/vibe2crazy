@@ -27,7 +27,7 @@ const searchApi = {
     }),
 
   clearCache: (taskId: string) =>
-    request<{ success: boolean }>('/search/cache', {
+    request<{ success: boolean }>(`/search/cache?task_id=${encodeURIComponent(taskId)}`, {
       method: 'DELETE'
     })
 }

@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { onUnmounted, shallowRef, type ShallowRef } from 'vue'
 import { useAuth } from './useAuth'
 import { wsNetworkManager } from '../utils/wsNetworkManager'
 import type { AddressType } from '../types/network'
@@ -25,117 +25,200 @@ function debounce<T extends (...args: any[]) => any>(
   }
 }
 
-export function useWebSocket(taskId: string) {
-  const { token } = useAuth()
-  const ws = ref<WebSocket | null>(null)
-  const connected = ref(false)
-  const connecting = ref(false)
-  const output = ref<string[]>([])
-  const error = ref<string | null>(null)
-  const connectionType = ref<AddressType>('public')
-  let isIntentionalClose = false
-  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+// Global connection pool - persists across component mount/unmount cycles
+interface PersistentConnection {
+  ws: WebSocket | null
+  connected: ShallowRef<boolean>
+  connecting: ShallowRef<boolean>
+  output: ShallowRef<string[]>
+  error: ShallowRef<string | null>
+  connectionType: ShallowRef<AddressType>
+  isIntentionalClose: boolean
+  reconnectTimeout: ReturnType<typeof setTimeout> | null
+  onDataCallback: ((data: string) => void) | null
+  messageHandlers: Map<string, (data: any) => void>
+  unsubscribeNetwork: (() => void) | null
+  pendingResize: { cols: number; rows: number } | null
+  taskId: string
+  refCount: number // Number of components using this connection
+}
 
-  // Callback for receiving data
-  let onDataCallback: ((data: string) => void) | null = null
-  // Custom message handlers for specific event types
-  const messageHandlers: Map<string, (data: any) => void> = new Map()
-  // Unsubscribe function for network changes
-  let unsubscribeNetwork: (() => void) | null = null
+// Global map of active connections keyed by taskId
+const globalConnections = new Map<string, PersistentConnection>()
+
+/**
+ * Close a connection by taskId (used when task changes or page unloads)
+ */
+export function closePersistentConnection(taskId: string): void {
+  const conn = globalConnections.get(taskId)
+  if (!conn) return
+
+  conn.refCount--
+  if (conn.refCount > 0) return // Still in use
+
+  console.log(`[useWebSocket] Closing persistent connection for task: ${taskId}`)
+  conn.isIntentionalClose = true
+
+  if (conn.reconnectTimeout) {
+    clearTimeout(conn.reconnectTimeout)
+    conn.reconnectTimeout = null
+  }
+
+  if (conn.ws) {
+    conn.ws.close()
+    conn.ws = null
+  }
+
+  conn.connected.value = false
+  conn.connecting.value = false
+  conn.onDataCallback = null
+  conn.messageHandlers.clear()
+
+  if (conn.unsubscribeNetwork) {
+    conn.unsubscribeNetwork()
+    conn.unsubscribeNetwork = null
+  }
+
+  globalConnections.delete(taskId)
+}
+
+export interface UseWebSocketOptions {
+  /** If true, disconnect will NOT be called automatically on unmount */
+  persistOnUnmount?: boolean
+}
+
+export function useWebSocket(taskId: string, options?: UseWebSocketOptions) {
+  const { token } = useAuth()
+
+  // Check if a persistent connection already exists for this taskId
+  let existing = globalConnections.get(taskId)
+
+  if (existing) {
+    existing.refCount++
+    console.log(`[useWebSocket] Reusing existing connection for task: ${taskId} (refCount: ${existing.refCount})`)
+  } else {
+    // Create new persistent connection
+    existing = {
+      ws: null,
+      connected: shallowRef(false),
+      connecting: shallowRef(false),
+      output: shallowRef<string[]>([]),
+      error: shallowRef<string | null>(null),
+      connectionType: shallowRef<AddressType>('public'),
+      isIntentionalClose: false,
+      reconnectTimeout: null,
+      onDataCallback: null,
+      messageHandlers: new Map(),
+      unsubscribeNetwork: null,
+      pendingResize: null,
+      taskId,
+      refCount: 1
+    }
+    globalConnections.set(taskId, existing)
+    console.log(`[useWebSocket] Created new persistent connection for task: ${taskId}`)
+  }
+
+  const conn = existing
 
   const connect = (onData?: (data: string) => void) => {
+    // If already connected, just update callback
+    if (conn.ws && conn.ws.readyState === WebSocketState.OPEN) {
+      if (onData) conn.onDataCallback = onData
+      return
+    }
+
     // Close existing connection if any
-    if (ws.value) {
-      isIntentionalClose = true
-      if (ws.value.readyState === WebSocketState.CONNECTING || ws.value.readyState === WebSocketState.OPEN) {
-        ws.value.close()
+    if (conn.ws) {
+      conn.isIntentionalClose = true
+      if (conn.ws.readyState === WebSocketState.CONNECTING || conn.ws.readyState === WebSocketState.OPEN) {
+        conn.ws.close()
       }
-      ws.value = null
+      conn.ws = null
     }
 
     // Clear any pending reconnect
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout)
-      reconnectTimeout = null
+    if (conn.reconnectTimeout) {
+      clearTimeout(conn.reconnectTimeout)
+      conn.reconnectTimeout = null
     }
 
     if (!token.value) {
-      error.value = 'Not authenticated'
+      conn.error.value = 'Not authenticated'
       return
     }
 
     // Register data callback
     if (onData) {
-      onDataCallback = onData
+      conn.onDataCallback = onData
     }
 
-    connecting.value = true
-    error.value = null
-    isIntentionalClose = false
-    connectionType.value = wsNetworkManager.getType()
+    conn.connecting.value = true
+    conn.error.value = null
+    conn.isIntentionalClose = false
+    conn.connectionType.value = wsNetworkManager.getType()
 
     // Get WebSocket URL from network manager
     const wsUrl = wsNetworkManager.getWsUrl(`/terminal?token=${token.value}&task_id=${taskId}`)
 
     try {
-      ws.value = new WebSocket(wsUrl)
+      conn.ws = new WebSocket(wsUrl)
 
-      ws.value.onopen = () => {
-        connected.value = true
-        connecting.value = false
-        error.value = null
+      conn.ws.onopen = () => {
+        conn.connected.value = true
+        conn.connecting.value = false
+        conn.error.value = null
         // Send any pending resize message
-        if (pendingResize) {
-          console.log(`[WebSocket] Sending pending resize: ${pendingResize.cols}x${pendingResize.rows}`)
-          ws.value?.send(JSON.stringify({ type: 'resize', cols: pendingResize.cols, rows: pendingResize.rows }))
-          pendingResize = null
+        if (conn.pendingResize) {
+          console.log(`[WebSocket] Sending pending resize: ${conn.pendingResize.cols}x${conn.pendingResize.rows}`)
+          conn.ws?.send(JSON.stringify({ type: 'resize', cols: conn.pendingResize.cols, rows: conn.pendingResize.rows }))
+          conn.pendingResize = null
         }
       }
 
-      ws.value.onmessage = (event) => {
+      conn.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data)
           if (msg.type === 'output') {
-            output.value.push(msg.data)
+            conn.output.value.push(msg.data)
             // Call callback if registered
-            if (onDataCallback) {
-              onDataCallback(msg.data)
+            if (conn.onDataCallback) {
+              conn.onDataCallback(msg.data)
             }
           } else if (msg.type === 'error') {
-            error.value = msg.message
+            conn.error.value = msg.message
           } else {
             // Handle custom message types (e.g., queue_updated)
-            const handler = messageHandlers.get(msg.type)
+            const handler = conn.messageHandlers.get(msg.type)
             if (handler) {
               handler(msg)
             }
           }
         } catch {
           // Raw text output
-          output.value.push(event.data)
-          if (onDataCallback) {
-            onDataCallback(event.data)
+          conn.output.value.push(event.data)
+          if (conn.onDataCallback) {
+            conn.onDataCallback(event.data)
           }
         }
       }
 
-      ws.value.onerror = () => {
-        error.value = 'WebSocket error'
-        connecting.value = false
+      conn.ws.onerror = () => {
+        conn.error.value = 'WebSocket error'
+        conn.connecting.value = false
       }
 
-      ws.value.onclose = () => {
-        connected.value = false
-        connecting.value = false
-        ws.value = null
+      conn.ws.onclose = () => {
+        conn.connected.value = false
+        conn.connecting.value = false
+        conn.ws = null
 
         // Auto-reconnect after 10s on abnormal disconnect (non-mobile only)
-        if (!isIntentionalClose && window.innerWidth >= 768 && token.value) {
-          if (onDataCallback) {
-            onDataCallback('\r\n\x1b[33mConnection lost. Reconnecting in 10s...\x1b[0m')
+        if (!conn.isIntentionalClose && window.innerWidth >= 768 && token.value) {
+          if (conn.onDataCallback) {
+            conn.onDataCallback('\r\n\x1b[33mConnection lost. Reconnecting in 10s...\x1b[0m')
           }
-          reconnectTimeout = setTimeout(() => {
-            reconnectTimeout = null
+          conn.reconnectTimeout = setTimeout(() => {
+            conn.reconnectTimeout = null
             if (token.value) {
               connect()
             }
@@ -143,34 +226,37 @@ export function useWebSocket(taskId: string) {
         }
       }
     } catch (err: any) {
-      error.value = err.message
-      connecting.value = false
+      conn.error.value = err.message
+      conn.connecting.value = false
     }
   }
 
   const disconnect = () => {
-    isIntentionalClose = true
+    conn.isIntentionalClose = true
 
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout)
-      reconnectTimeout = null
+    if (conn.reconnectTimeout) {
+      clearTimeout(conn.reconnectTimeout)
+      conn.reconnectTimeout = null
     }
 
-    if (ws.value) {
-      ws.value.close()
-      ws.value = null
+    if (conn.ws) {
+      conn.ws.close()
+      conn.ws = null
     }
 
-    connected.value = false
-    connecting.value = false
-    onDataCallback = null
-    messageHandlers.clear()
+    conn.connected.value = false
+    conn.connecting.value = false
+    conn.onDataCallback = null
+    conn.messageHandlers.clear()
 
     // Unsubscribe from network changes
-    if (unsubscribeNetwork) {
-      unsubscribeNetwork()
-      unsubscribeNetwork = null
+    if (conn.unsubscribeNetwork) {
+      conn.unsubscribeNetwork()
+      conn.unsubscribeNetwork = null
     }
+
+    // Remove from global pool
+    globalConnections.delete(taskId)
   }
 
   /**
@@ -186,61 +272,58 @@ export function useWebSocket(taskId: string) {
    * Setup network change listener - reconnect when switching between LAN/public
    */
   const setupNetworkListener = () => {
-    if (unsubscribeNetwork) return // Already setup
+    if (conn.unsubscribeNetwork) return // Already setup
 
-    unsubscribeNetwork = wsNetworkManager.onWsBaseChange((_base: string, type: AddressType) => {
+    conn.unsubscribeNetwork = wsNetworkManager.onWsBaseChange((_base: string, type: AddressType) => {
       console.log(`[WebSocket] Network changed to ${type}, reconnecting...`)
-      connectionType.value = type
+      conn.connectionType.value = type
 
       // Immediately reconnect if connected
-      if (connected.value || connecting.value) {
+      if (conn.connected.value || conn.connecting.value) {
         // Close current connection
-        if (ws.value) {
-          ws.value.close()
-          ws.value = null
+        if (conn.ws) {
+          conn.ws.close()
+          conn.ws = null
         }
-        connected.value = false
-        connecting.value = false
+        conn.connected.value = false
+        conn.connecting.value = false
 
         // Reconnect with new address
         if (token.value) {
-          setTimeout(() => connect(onDataCallback || undefined), 100)
+          setTimeout(() => connect(conn.onDataCallback || undefined), 100)
         }
       }
     })
   }
 
   const onMessage = (type: string, handler: (data: any) => void) => {
-    messageHandlers.set(type, handler)
+    conn.messageHandlers.set(type, handler)
   }
 
   const offMessage = (type: string) => {
-    messageHandlers.delete(type)
+    conn.messageHandlers.delete(type)
   }
 
   const send = (data: string) => {
-    if (ws.value && ws.value.readyState === WebSocketState.OPEN) {
-      ws.value.send(JSON.stringify({ type: 'input', data }))
+    if (conn.ws && conn.ws.readyState === WebSocketState.OPEN) {
+      conn.ws.send(JSON.stringify({ type: 'input', data }))
     }
   }
 
   const sendRaw = (message: object) => {
-    if (ws.value && ws.value.readyState === WebSocketState.OPEN) {
-      ws.value.send(JSON.stringify(message))
+    if (conn.ws && conn.ws.readyState === WebSocketState.OPEN) {
+      conn.ws.send(JSON.stringify(message))
     }
   }
 
-  // Queue for resize messages before connection is ready
-  let pendingResize: { cols: number; rows: number } | null = null
-
   // Debounced resize to prevent flooding backend during window resize
   const debouncedResize = debounce((cols: number, rows: number) => {
-    if (ws.value && ws.value.readyState === WebSocketState.OPEN) {
-      ws.value.send(JSON.stringify({ type: 'resize', cols, rows }))
+    if (conn.ws && conn.ws.readyState === WebSocketState.OPEN) {
+      conn.ws.send(JSON.stringify({ type: 'resize', cols, rows }))
       console.log(`[WebSocket] Sent resize: ${cols}x${rows}`)
     } else {
       // Store resize to send when connection opens
-      pendingResize = { cols, rows }
+      conn.pendingResize = { cols, rows }
       console.log(`[WebSocket] Queued resize: ${cols}x${rows} (not connected)`)
     }
   }, 200) // 200ms debounce delay
@@ -250,23 +333,28 @@ export function useWebSocket(taskId: string) {
   }
 
   const clearOutput = () => {
-    output.value = []
+    conn.output.value = []
   }
 
   onUnmounted(() => {
-  try {
-    disconnect()
-  } catch (err: any) {
-    console.error('[Terminal] Error during disconnect:', err)
-  }
-})
+    conn.refCount--
+
+    if (options?.persistOnUnmount) {
+      return
+    }
+
+    // Only truly disconnect if no other components are using this connection
+    if (conn.refCount <= 0) {
+      disconnect()
+    }
+  })
 
   return {
-    connected,
-    connecting,
-    output,
-    error,
-    connectionType,
+    connected: conn.connected,
+    connecting: conn.connecting,
+    output: conn.output,
+    error: conn.error,
+    connectionType: conn.connectionType,
     connect,
     delayedConnect,
     setupNetworkListener,

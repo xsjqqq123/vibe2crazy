@@ -1,0 +1,375 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e99]:
+    - banner [ref=e100]:
+      - generic [ref=e101]:
+        - generic [ref=e102]:
+          - button [ref=e103] [cursor=pointer]:
+            - img [ref=e104]
+          - heading "Test commit diff task" [level=1] [ref=e106]
+        - generic [ref=e107]:
+          - button "Terminal" [ref=e108] [cursor=pointer]:
+            - img [ref=e109]
+          - button "Cycle theme" [ref=e111] [cursor=pointer]:
+            - img [ref=e112]
+          - button "Global Terminal" [ref=e114] [cursor=pointer]:
+            - img [ref=e115]
+          - button "Settings" [ref=e118] [cursor=pointer]:
+            - img [ref=e119]
+    - generic [ref=e122]:
+      - generic [ref=e124]:
+        - generic [ref=e126]:
+          - generic [ref=e127]:
+            - heading "Files" [level=3] [ref=e128]
+            - button "Refresh" [ref=e129] [cursor=pointer]:
+              - img [ref=e130]
+          - generic [ref=e132]:
+            - generic [ref=e134] [cursor=pointer]:
+              - generic [ref=e135]: 📄
+              - generic [ref=e136]: file_1.py
+            - generic [ref=e138] [cursor=pointer]:
+              - generic [ref=e139]: 📄
+              - generic [ref=e140]: file_10.py
+            - generic [ref=e142] [cursor=pointer]:
+              - generic [ref=e143]: 📄
+              - generic [ref=e144]: file_11.py
+            - generic [ref=e146] [cursor=pointer]:
+              - generic [ref=e147]: 📄
+              - generic [ref=e148]: file_12.py
+            - generic [ref=e150] [cursor=pointer]:
+              - generic [ref=e151]: 📄
+              - generic [ref=e152]: file_13.py
+            - generic [ref=e154] [cursor=pointer]:
+              - generic [ref=e155]: 📄
+              - generic [ref=e156]: file_14.py
+            - generic [ref=e158] [cursor=pointer]:
+              - generic [ref=e159]: 📄
+              - generic [ref=e160]: file_15.py
+            - generic [ref=e162] [cursor=pointer]:
+              - generic [ref=e163]: 📄
+              - generic [ref=e164]: file_16.py
+            - generic [ref=e166] [cursor=pointer]:
+              - generic [ref=e167]: 📄
+              - generic [ref=e168]: file_17.py
+            - generic [ref=e170] [cursor=pointer]:
+              - generic [ref=e171]: 📄
+              - generic [ref=e172]: file_18.py
+            - generic [ref=e174] [cursor=pointer]:
+              - generic [ref=e175]: 📄
+              - generic [ref=e176]: file_19.py
+            - generic [ref=e178] [cursor=pointer]:
+              - generic [ref=e179]: 📄
+              - generic [ref=e180]: file_2.py
+            - generic [ref=e182] [cursor=pointer]:
+              - generic [ref=e183]: 📄
+              - generic [ref=e184]: file_20.py
+            - generic [ref=e186] [cursor=pointer]:
+              - generic [ref=e187]: 📄
+              - generic [ref=e188]: file_21.py
+            - generic [ref=e190] [cursor=pointer]:
+              - generic [ref=e191]: 📄
+              - generic [ref=e192]: file_22.py
+            - generic [ref=e194] [cursor=pointer]:
+              - generic [ref=e195]: 📄
+              - generic [ref=e196]: file_23.py
+            - generic [ref=e198] [cursor=pointer]:
+              - generic [ref=e199]: 📄
+              - generic [ref=e200]: file_24.py
+            - generic [ref=e202] [cursor=pointer]:
+              - generic [ref=e203]: 📄
+              - generic [ref=e204]: file_25.py
+            - generic [ref=e206] [cursor=pointer]:
+              - generic [ref=e207]: 📄
+              - generic [ref=e208]: file_3.py
+            - generic [ref=e210] [cursor=pointer]:
+              - generic [ref=e211]: 📄
+              - generic [ref=e212]: file_4.py
+            - generic [ref=e214] [cursor=pointer]:
+              - generic [ref=e215]: 📄
+              - generic [ref=e216]: file_5.py
+            - generic [ref=e218] [cursor=pointer]:
+              - generic [ref=e219]: 📄
+              - generic [ref=e220]: file_6.py
+            - generic [ref=e222] [cursor=pointer]:
+              - generic [ref=e223]: 📄
+              - generic [ref=e224]: file_7.py
+            - generic [ref=e226] [cursor=pointer]:
+              - generic [ref=e227]: 📄
+              - generic [ref=e228]: file_8.py
+            - generic [ref=e230] [cursor=pointer]:
+              - generic [ref=e231]: 📄
+              - generic [ref=e232]: file_9.py
+        - generic [ref=e235]:
+          - generic [ref=e236]:
+            - heading "Changes" [level=3] [ref=e237]
+            - button "Accept" [ref=e238] [cursor=pointer]:
+              - img [ref=e239]
+          - generic [ref=e241]: No changes detected
+        - generic [ref=e244]:
+          - generic [ref=e245]:
+            - heading "Commits" [level=3] [ref=e246]
+            - button "Merge" [ref=e248] [cursor=pointer]:
+              - img [ref=e249]
+          - generic [ref=e252]:
+            - generic [ref=e599] [cursor=pointer]:
+              - generic [ref=e600]:
+                - code [ref=e602]: 18e462f4
+                - generic [ref=e603]: 2026-04-18 10:02:50
+              - paragraph [ref=e604]: Bulk modify 25 files
+              - generic [ref=e605]:
+                - generic [ref=e606]:
+                  - generic [ref=e607]: ~
+                  - generic [ref=e608]: file_1.py
+                  - generic [ref=e609]: "+1"
+                - generic [ref=e610]:
+                  - generic [ref=e611]: ~
+                  - generic [ref=e612]: file_10.py
+                  - generic [ref=e613]: "+1"
+                - generic [ref=e614]:
+                  - generic [ref=e615]: ~
+                  - generic [ref=e616]: file_11.py
+                  - generic [ref=e617]: "+1"
+                - generic [ref=e618]:
+                  - generic [ref=e619]: ~
+                  - generic [ref=e620]: file_12.py
+                  - generic [ref=e621]: "+1"
+                - generic [ref=e622]:
+                  - generic [ref=e623]: ~
+                  - generic [ref=e624]: file_13.py
+                  - generic [ref=e625]: "+1"
+                - generic [ref=e626]: and 20 more files...
+            - generic [ref=e253] [cursor=pointer]:
+              - generic [ref=e254]:
+                - code [ref=e256]: 1502783f
+                - generic [ref=e257]: 2026-04-18 10:00:10
+              - paragraph [ref=e258]: Modify file 1 and 2
+              - generic [ref=e259]:
+                - generic [ref=e260]:
+                  - generic [ref=e261]: ~
+                  - generic [ref=e262]: file_1.py
+                  - generic [ref=e263]: "+1"
+                - generic [ref=e264]:
+                  - generic [ref=e265]: ~
+                  - generic [ref=e266]: file_2.py
+                  - generic [ref=e267]: "+1"
+            - generic [ref=e268] [cursor=pointer]:
+              - generic [ref=e269]:
+                - code [ref=e271]: "648726e5"
+                - generic [ref=e272]: 2026-04-18 10:00:10
+              - paragraph [ref=e273]: Modify 10 files in bulk
+              - generic [ref=e274]:
+                - generic [ref=e275]:
+                  - generic [ref=e276]: ~
+                  - generic [ref=e277]: file_1.py
+                  - generic [ref=e278]: +3-2
+                - generic [ref=e279]:
+                  - generic [ref=e280]: ~
+                  - generic [ref=e281]: file_10.py
+                  - generic [ref=e282]: +3-2
+                - generic [ref=e283]:
+                  - generic [ref=e284]: ~
+                  - generic [ref=e285]: file_2.py
+                  - generic [ref=e286]: +3-2
+                - generic [ref=e287]:
+                  - generic [ref=e288]: ~
+                  - generic [ref=e289]: file_3.py
+                  - generic [ref=e290]: +3-2
+                - generic [ref=e291]:
+                  - generic [ref=e292]: ~
+                  - generic [ref=e293]: file_4.py
+                  - generic [ref=e294]: +3-2
+                - generic [ref=e295]: and 5 more files...
+          - generic [ref=e296]:
+            - generic [ref=e297]:
+              - button "Previous" [disabled] [ref=e298]
+              - button "1" [ref=e299] [cursor=pointer]
+              - button "Next" [disabled] [ref=e300]
+            - generic [ref=e301]: Showing 1-3 of 3 commits
+      - generic [ref=e304]:
+        - main [ref=e306]:
+          - generic [ref=e627]:
+            - generic [ref=e628]:
+              - generic [ref=e629]: 📋
+              - generic [ref=e630]: "Commit: 18e462f4 - Bulk modify 25 files"
+            - button "Close" [ref=e632] [cursor=pointer]:
+              - img [ref=e633]
+          - generic [ref=e635]:
+            - generic [ref=e636]:
+              - generic [ref=e637]:
+                - code [ref=e638]: 18e462f4
+                - generic [ref=e639]: "-"
+                - generic [ref=e640]: Bulk modify 25 files
+              - generic [ref=e641]: 25 file(s) changed
+            - generic [ref=e642]:
+              - generic [ref=e644] [cursor=pointer]:
+                - generic [ref=e645]:
+                  - generic [ref=e646]: ~
+                  - generic [ref=e647]: file_1.py
+                  - generic [ref=e648]: "+1"
+                - generic [ref=e650]: ▶
+              - generic [ref=e652] [cursor=pointer]:
+                - generic [ref=e653]:
+                  - generic [ref=e654]: ~
+                  - generic [ref=e655]: file_10.py
+                  - generic [ref=e656]: "+1"
+                - generic [ref=e658]: ▶
+              - generic [ref=e660] [cursor=pointer]:
+                - generic [ref=e661]:
+                  - generic [ref=e662]: ~
+                  - generic [ref=e663]: file_11.py
+                  - generic [ref=e664]: "+1"
+                - generic [ref=e666]: ▶
+              - generic [ref=e668] [cursor=pointer]:
+                - generic [ref=e669]:
+                  - generic [ref=e670]: ~
+                  - generic [ref=e671]: file_12.py
+                  - generic [ref=e672]: "+1"
+                - generic [ref=e674]: ▶
+              - generic [ref=e676] [cursor=pointer]:
+                - generic [ref=e677]:
+                  - generic [ref=e678]: ~
+                  - generic [ref=e679]: file_13.py
+                  - generic [ref=e680]: "+1"
+                - generic [ref=e682]: ▶
+              - generic [ref=e684] [cursor=pointer]:
+                - generic [ref=e685]:
+                  - generic [ref=e686]: ~
+                  - generic [ref=e687]: file_14.py
+                  - generic [ref=e688]: "+1"
+                - generic [ref=e690]: ▶
+              - generic [ref=e692] [cursor=pointer]:
+                - generic [ref=e693]:
+                  - generic [ref=e694]: ~
+                  - generic [ref=e695]: file_15.py
+                  - generic [ref=e696]: "+1"
+                - generic [ref=e698]: ▶
+              - generic [ref=e700] [cursor=pointer]:
+                - generic [ref=e701]:
+                  - generic [ref=e702]: ~
+                  - generic [ref=e703]: file_16.py
+                  - generic [ref=e704]: "+1"
+                - generic [ref=e706]: ▶
+              - generic [ref=e708] [cursor=pointer]:
+                - generic [ref=e709]:
+                  - generic [ref=e710]: ~
+                  - generic [ref=e711]: file_17.py
+                  - generic [ref=e712]: "+1"
+                - generic [ref=e714]: ▶
+              - generic [ref=e716] [cursor=pointer]:
+                - generic [ref=e717]:
+                  - generic [ref=e718]: ~
+                  - generic [ref=e719]: file_18.py
+                  - generic [ref=e720]: "+1"
+                - generic [ref=e722]: ▶
+              - generic [ref=e724] [cursor=pointer]:
+                - generic [ref=e725]:
+                  - generic [ref=e726]: ~
+                  - generic [ref=e727]: file_19.py
+                  - generic [ref=e728]: "+1"
+                - generic [ref=e730]: ▶
+              - generic [ref=e732] [cursor=pointer]:
+                - generic [ref=e733]:
+                  - generic [ref=e734]: ~
+                  - generic [ref=e735]: file_2.py
+                  - generic [ref=e736]: "+1"
+                - generic [ref=e738]: ▶
+              - generic [ref=e740] [cursor=pointer]:
+                - generic [ref=e741]:
+                  - generic [ref=e742]: ~
+                  - generic [ref=e743]: file_20.py
+                  - generic [ref=e744]: "+1"
+                - generic [ref=e746]: ▶
+              - generic [ref=e748] [cursor=pointer]:
+                - generic [ref=e749]:
+                  - generic [ref=e750]: ~
+                  - generic [ref=e751]: file_21.py
+                  - generic [ref=e752]: "+1"
+                - generic [ref=e754]: ▶
+              - generic [ref=e756] [cursor=pointer]:
+                - generic [ref=e757]:
+                  - generic [ref=e758]: ~
+                  - generic [ref=e759]: file_22.py
+                  - generic [ref=e760]: "+1"
+                - generic [ref=e762]: ▶
+              - generic [ref=e764] [cursor=pointer]:
+                - generic [ref=e765]:
+                  - generic [ref=e766]: ~
+                  - generic [ref=e767]: file_23.py
+                  - generic [ref=e768]: "+1"
+                - generic [ref=e770]: ▶
+              - generic [ref=e772] [cursor=pointer]:
+                - generic [ref=e773]:
+                  - generic [ref=e774]: ~
+                  - generic [ref=e775]: file_24.py
+                  - generic [ref=e776]: "+1"
+                - generic [ref=e778]: ▶
+              - generic [ref=e780] [cursor=pointer]:
+                - generic [ref=e781]:
+                  - generic [ref=e782]: ~
+                  - generic [ref=e783]: file_25.py
+                  - generic [ref=e784]: "+1"
+                - generic [ref=e786]: ▶
+              - generic [ref=e788] [cursor=pointer]:
+                - generic [ref=e789]:
+                  - generic [ref=e790]: ~
+                  - generic [ref=e791]: file_3.py
+                  - generic [ref=e792]: "+1"
+                - generic [ref=e794]: ▶
+              - generic [ref=e796] [cursor=pointer]:
+                - generic [ref=e797]:
+                  - generic [ref=e798]: ~
+                  - generic [ref=e799]: file_4.py
+                  - generic [ref=e800]: "+1"
+                - generic [ref=e802]: ▶
+              - generic [ref=e803]:
+                - generic [ref=e804]:
+                  - button "Previous" [disabled] [ref=e805]
+                  - button "1" [ref=e806] [cursor=pointer]
+                  - button "2" [ref=e807] [cursor=pointer]
+                  - button "Next" [ref=e808] [cursor=pointer]
+                - generic [ref=e809]: Showing 1-20 of 25 commits
+        - generic [ref=e313]:
+          - generic [ref=e315]:
+            - generic [ref=e317]: Connected
+            - generic [ref=e361]: LAN
+          - generic [ref=e321]:
+            - textbox "Terminal input" [ref=e322]
+            - generic:
+              - generic:
+                - generic: $ cd /tmp/test-commit-diff-worktrees/test-commit-d
+              - generic:
+                - generic: iff-task-e5676662
+              - generic:
+                - generic: $
+          - generic [ref=e323]:
+            - button "Page Up" [ref=e324] [cursor=pointer]:
+              - img [ref=e325]
+            - button "Up arrow" [ref=e328] [cursor=pointer]:
+              - img [ref=e329]
+            - button "Page Down" [ref=e331] [cursor=pointer]:
+              - img [ref=e332]
+            - button "A" [ref=e335] [cursor=pointer]
+            - button "B" [ref=e336] [cursor=pointer]
+            - button "C" [ref=e337] [cursor=pointer]
+            - button "D" [ref=e338] [cursor=pointer]
+            - button "ENTER" [ref=e339] [cursor=pointer]
+            - button "TAB" [ref=e340] [cursor=pointer]
+            - button "GO" [ref=e341] [cursor=pointer]
+            - button "ABC" [ref=e342] [cursor=pointer]
+            - button "Left arrow" [ref=e343] [cursor=pointer]:
+              - img [ref=e344]
+            - button "Down arrow" [ref=e346] [cursor=pointer]:
+              - img [ref=e347]
+            - button "Right arrow" [ref=e349] [cursor=pointer]:
+              - img [ref=e350]
+            - button "1" [ref=e352] [cursor=pointer]
+            - button "2" [ref=e353] [cursor=pointer]
+            - button "3" [ref=e354] [cursor=pointer]
+            - button "4" [ref=e355] [cursor=pointer]
+            - button "UPLOAD" [ref=e356] [cursor=pointer]
+            - button "LOG" [ref=e357] [cursor=pointer]:
+              - generic [ref=e358]: LOG
+            - button "CMD" [ref=e359] [cursor=pointer]
+            - button "TODO" [ref=e360] [cursor=pointer]
+  - generic [ref=e523]:
+    - alert
+    - alert

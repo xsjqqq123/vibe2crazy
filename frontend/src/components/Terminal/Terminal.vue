@@ -5,7 +5,6 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useMainStore, type ThemeName } from '@/store'
-import terminalsApi from '@/api/terminals'
 import HistoryViewer from './HistoryViewer.vue'
 import QueueModal from './QueueModal.vue'
 import CommandPresetsModal from './CommandPresetsModal.vue'
@@ -28,7 +27,6 @@ const store = useMainStore()
 // View mode state
 const viewMode = ref<'terminal' | 'history'>('terminal')
 const historyContent = ref('')
-const loadingHistory = ref(false)
 const historyError = ref('')
 const showQueueModal = ref(false)
 const showCommandPresets = ref(false)
@@ -42,9 +40,10 @@ const xterm = ref<XTerminal | null>(null)
 const fitAddon = ref<FitAddon | null>(null)
 const resizeObserver = ref<ResizeObserver | null>(null)
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+let initialResizeTimer: ReturnType<typeof setTimeout> | null = null
 let wheelHandler: ((e: WheelEvent) => void) | null = null
 
-const { connected, connecting, connectionType, delayedConnect, setupNetworkListener, disconnect, send, sendRaw, resize } = useWebSocket(props.taskId)
+const { connected, connecting, connectionType, connect, setupNetworkListener, send, sendRaw, resize } = useWebSocket(props.taskId, { persistOnUnmount: true })
 
 // Theme configurations for xterm.js
 const DARK_THEME = {
@@ -243,25 +242,6 @@ const sendCommandWithDelay = async (command: string) => {
   send('\r')
 }
 
-const loadHistory = async () => {
-  loadingHistory.value = true
-  historyError.value = ''
-  try {
-    historyContent.value = await terminalsApi.getHistoryAsText(props.taskId)
-  } catch (err: any) {
-    historyError.value = err.message || 'Failed to load terminal history'
-    console.error('Failed to load history:', err)
-  }
-  loadingHistory.value = false
-}
-
-const handleViewHistory = async () => {
-  await loadHistory()
-  if (!historyError.value) {
-    viewMode.value = 'history'
-  }
-}
-
 const handleBackToTerminal = () => {
   viewMode.value = 'terminal'
 }
@@ -330,22 +310,41 @@ const initTerminal = () => {
     }
   })
 
-  // Send initial dimensions to backend
-  const initialCols = xterm.value.cols
-  const initialRows = xterm.value.rows
-  resize(initialCols, initialRows)
+  // Wait for container size to stabilize (2s) before sending initial resize
+  // This prevents sending wrong dimensions during layout transitions (e.g. tunnel access)
+  let lastInitialDims = { cols: 0, rows: 0 }
 
-  // Handle terminal resize events
+  const tryInitialResize = () => {
+    if (!fitAddon.value || !xterm.value) return
+    fitAddon.value.fit()
+    const { cols, rows } = xterm.value
+    if (cols === lastInitialDims.cols && rows === lastInitialDims.rows) {
+      // Size unchanged for 2s — stable, send resize
+      console.log(`[Terminal] Initial resize (stable): ${cols}x${rows}`)
+      resize(cols, rows)
+      initialResizeDone = true
+    } else {
+      // Size changed, restart 2s timer
+      lastInitialDims = { cols, rows }
+      initialResizeTimer = setTimeout(tryInitialResize, 2000)
+    }
+  }
+  lastInitialDims = { cols: xterm.value.cols, rows: xterm.value.rows }
+  initialResizeTimer = setTimeout(tryInitialResize, 2000)
+
+  // Handle terminal resize events (after initial stabilization)
+  let initialResizeDone = false
   xterm.value.onResize(({ cols, rows }) => {
+    if (!initialResizeDone) return
     resize(cols, rows)
   })
 
   // Setup network change listener for auto-reconnect
   setupNetworkListener()
 
-  // Delayed connect (3 seconds to allow network detection to complete)
-  xterm.value.writeln('\x1b[33mWaiting for network detection...\x1b[0m')
-  delayedConnect(3000, (data: string) => {
+  // Connect immediately - network detection runs in background
+  // Resize will be queued as pendingResize and sent when connection opens
+  connect((data: string) => {
     xterm.value?.write(data)
     checkApiError()
   })
@@ -475,6 +474,7 @@ const handleResize = () => {
 
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
+  if (initialResizeTimer) clearTimeout(initialResizeTimer)
   if (apiErrorTimer) clearTimeout(apiErrorTimer)
 
   // Clean up wheel event listener
@@ -485,7 +485,11 @@ onUnmounted(() => {
     }
   }
 
-  disconnect()
+  // DO NOT call disconnect() here - the WebSocket connection pool will handle cleanup
+  // When the terminal is hidden (component deactivated), the connection stays alive
+  // When the terminal is truly unmounted (task change or page navigation), useWebSocket's
+  // onUnmounted will handle the cleanup via reference counting
+
   window.removeEventListener('resize', handleResize)
   resizeObserver.value?.disconnect()
 
@@ -503,10 +507,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="terminal-container h-full flex flex-col bg-main">
+  <div ref="containerRef" class="terminal-container h-full flex flex-col bg-main min-h-0">
     <!-- Terminal view -->
-    <div v-show="viewMode === 'terminal'" class="flex flex-col h-full">
-      <div class="terminal-header flex items-center px-4 py-2 bg-sub border-b border-main">
+    <div v-show="viewMode === 'terminal'" class="flex flex-col min-h-0 h-full">
+      <div class="terminal-header flex items-center px-4 py-2 bg-sub border-b border-main flex-shrink-0">
         <div class="terminal-status flex items-center gap-2">
           <span
             :class="[
@@ -528,11 +532,11 @@ onUnmounted(() => {
           </span>
         </div>
       </div>
-      <div ref="terminalRef" class="flex-1 overflow-hidden"></div>
+      <div ref="terminalRef" class="terminal-viewport-wrapper flex-1 overflow-hidden min-h-0"></div>
     </div>
 
     <!-- Control bar - 3 rows -->
-    <div class="terminal-controls flex flex-col bg-sub border-t border-main">
+    <div class="terminal-controls flex flex-col bg-sub border-t border-main flex-shrink-0">
       <!-- Row 1: navigation + letter keys + ENTER -->
       <div class="grid" style="grid-template-columns: repeat(8, 1fr);">
         <button @click="handlePageUp" :disabled="!connected" class="control-btn" title="Page Up">
@@ -634,6 +638,16 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* Terminal container must allow shrinking below content size */
+.terminal-container {
+  min-height: 0;
+}
+
+/* Xterm wrapper must be the flexible element that compresses */
+.terminal-viewport-wrapper {
+  min-height: 0;
+}
+
 .terminal-container :deep(.xterm) {
   height: 100%;
   padding: 0 !important;
@@ -721,8 +735,11 @@ onUnmounted(() => {
   transition: background-color 0.1s;
 }
 
-.control-btn:hover:not(:disabled) {
-  background-color: var(--bg-tertiary);
+/* Only apply hover on devices that support hover (not mobile touch) */
+@media (hover: hover) {
+  .control-btn:hover:not(:disabled) {
+    background-color: var(--bg-tertiary);
+  }
 }
 
 .control-btn:active:not(:disabled) {

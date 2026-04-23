@@ -1,0 +1,37 @@
+- generic [ref=e67]:
+  - banner [ref=e68]:
+    - generic [ref=e69]:
+      - generic [ref=e70]:
+        - button [ref=e71] [cursor=pointer]:
+          - img [ref=e72]
+        - generic [ref=e74]:
+          - heading "test1" [level=1] [ref=e75]
+          - paragraph [ref=e76]: Tasks
+      - generic [ref=e77]:
+        - button "Cycle theme" [ref=e78] [cursor=pointer]:
+          - img [ref=e79]
+        - button "Global Terminal" [ref=e81] [cursor=pointer]:
+          - img [ref=e82]
+        - button "Logout" [ref=e85] [cursor=pointer]:
+          - img [ref=e86]
+  - main [ref=e88]:
+    - generic [ref=e89]:
+      - heading "Tasks" [level=2] [ref=e90]
+      - button "+ New Task" [ref=e91] [cursor=pointer]
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - heading "In Progress (0)" [level=2] [ref=e94]
+        - generic [ref=e95]: No in-progress tasks
+      - generic [ref=e96]:
+        - heading "Completed (1)" [level=2] [ref=e97]
+        - generic [ref=e99] [cursor=pointer]:
+          - button "Delete task" [ref=e100]:
+            - img [ref=e101]
+          - generic [ref=e103]:
+            - heading "1" [level=3] [ref=e105]
+            - paragraph [ref=e106]: 1-bc0f339a
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - generic [ref=e109]: ⚪
+              - generic [ref=e110]: Idle
+            - generic [ref=e111]: No changes

@@ -1,0 +1,16 @@
+[project]
+name = "vibe2crazy"
+version = "0.1.0"
+description = "Remote code editing tool with Git worktree isolation and persistent terminals"
+authors = [
+    {name = "vibe2crazy"}
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

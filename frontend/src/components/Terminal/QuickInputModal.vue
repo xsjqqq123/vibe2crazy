@@ -95,8 +95,10 @@ const handleKeydown = (e: KeyboardEvent) => {
   transition: all 0.15s ease;
 }
 
-.quick-input-btn:hover:not(:disabled) {
-  background-color: var(--bg-secondary);
+@media (hover: hover) {
+  .quick-input-btn:hover:not(:disabled) {
+    background-color: var(--bg-secondary);
+  }
 }
 
 .quick-input-btn:active:not(:disabled) {
