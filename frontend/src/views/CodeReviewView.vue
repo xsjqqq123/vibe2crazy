@@ -7,7 +7,7 @@ import { useMainStore } from '@/store'
 import filesApi from '@/api/files'
 import tasksApi, { type Task } from '@/api/tasks'
 import projectsApi from '@/api/projects'
-import { gitApi, type CommitInfo, type CommitDiff, type PaginatedCommitsResponse } from '@/api/git'
+import { gitApi, type CommitInfo, type PaginatedCommitsResponse } from '@/api/git'
 import { type ChangedFileInfo, type PaginatedChangedFilesResponse } from '@/api/files'
 import { isLanMode } from '@/api/client'
 import FileCacheService from '@/services/FileCacheService'
@@ -21,9 +21,11 @@ import type { MenuItem } from '@/components/ContextMenu.vue'
 import SymbolOutline from '@/components/Monaco/SymbolOutline.vue'
 import ConflictEditor from '@/components/Monaco/ConflictEditor.vue'
 import TaskSettingsModal from '@/components/TaskSettingsModal.vue'
+import RefererSearch from '@/components/RefererSearch.vue'
 import { useSymbolOutline, type SymbolInfo } from '@/composables/useSymbolOutline'
 import { detectLanguage, supportsSymbolExtraction } from '@/utils/languageDetection'
 import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
+import { closePersistentConnection } from '@/composables/useWebSocket'
 
 interface ButtonStates {
   can_accept: boolean
@@ -53,6 +55,7 @@ const task = computed(() => store.currentTask)
 const tasks = ref<Task[]>([])
 const tasksLoading = ref(false)
 const activeTab = ref<'changes' | 'commits'>('changes')
+const activeFilesTab = ref<'files' | 'referer'>('files')
 
 // Changed files
 const changedFiles = ref<ChangedFileInfo[]>([])
@@ -106,8 +109,23 @@ const isFileDeleted = ref(false)
 const showFileList = ref(false)
 const isMobile = ref(window.innerWidth < 768)
 
-// Terminal
-const showTerminal = ref(!isMobile.value)
+// Terminal - show terminal first on both mobile and desktop
+const showTerminal = ref(true)
+
+// Direct on branch banner - hide after 5s or when closed
+const hideDirectBranchBanner = ref(false)
+let directBranchBannerTimer: ReturnType<typeof setTimeout> | null = null
+
+// Watch for direct_on_branch to start 5s auto-hide timer
+watch(() => task.value?.direct_on_branch, (direct) => {
+  if (direct) {
+    hideDirectBranchBanner.value = false
+    if (directBranchBannerTimer) clearTimeout(directBranchBannerTimer)
+    directBranchBannerTimer = setTimeout(() => {
+      hideDirectBranchBanner.value = true
+    }, 5000)
+  }
+})
 
 // Merge
 const mergeError = ref('')
@@ -122,6 +140,8 @@ const showCreateDialog = ref(false)
 const newTaskName = ref('')
 const newTaskDirectOnBranch = ref(false)
 const creatingTask = ref(false)
+const showDeleteConfirm = ref(false)
+const deleteTargetTask = ref<{ id: string; name: string } | null>(null)
 
 const createTask = async () => {
   if (!newTaskName.value.trim()) {
@@ -509,10 +529,6 @@ watch(showTerminal, (isShown) => {
   }
 })
 
-// Update terminal visibility when viewport changes between mobile/desktop
-watch(isMobile, (newIsMobile) => {
-  showTerminal.value = !newIsMobile
-})
 
 watch(layout, (newLayout, oldLayout) => {
   console.log('[Layout Debug] layout watcher triggered', {
@@ -522,8 +538,12 @@ watch(layout, (newLayout, oldLayout) => {
   saveLayout()
 }, { deep: true })
 
-// Reset to page 1 when task changes
-watch(taskId, async () => {
+// Reset to page 1 when task changes and cleanup old terminal connection
+watch(taskId, async (_newId, oldId) => {
+  // Close old task's terminal connection when switching tasks
+  if (oldId) {
+    closePersistentConnection(oldId)
+  }
   currentPage.value = 1
   changedFilesPage.value = 1
   await loadTask()
@@ -604,6 +624,10 @@ const loadFileTree = async () => {
   } catch (err: any) {
     console.error('Failed to load file tree:', err)
   }
+}
+
+const handleSearchSelect = (filePath: string, lineNumber: number) => {
+  loadFile(filePath)
 }
 
 const loadTask = async (taskIdOverride?: string) => {
@@ -1191,6 +1215,35 @@ const toggleDir = async (path: string) => {
   }
 }
 
+const deleteTask = async (id: string, event: Event) => {
+  event.stopPropagation()
+  const task = tasks.value.find(t => t.id === id)
+  if (!task || task.direct_on_branch) return
+  deleteTargetTask.value = { id: task.id, name: task.name }
+  showDeleteConfirm.value = true
+}
+
+const confirmDeleteTask = async () => {
+  if (!deleteTargetTask.value) return
+  try {
+    await tasksApi.delete(deleteTargetTask.value.id)
+    tasks.value = tasks.value.filter(t => t.id !== deleteTargetTask.value!.id)
+    if (deleteTargetTask.value.id === taskId.value && tasks.value.length > 0) {
+      await switchTask(tasks.value[0].id)
+    }
+  } catch (err: any) {
+    console.error('Failed to delete task:', err)
+  } finally {
+    showDeleteConfirm.value = false
+    deleteTargetTask.value = null
+  }
+}
+
+const cancelDeleteTask = () => {
+  showDeleteConfirm.value = false
+  deleteTargetTask.value = null
+}
+
 // Helper functions for FileTreeItem
 const isChanged = (path: string) => changedFiles.value.some(f => f.path === path)
 const isSelected = (path: string) => currentFile.value === path && editorMode.value === 'editor'
@@ -1770,15 +1823,21 @@ onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('keydown', handleGlobalKeydown)
   stopRefresh()
+  // Clean up banner timer
+  if (directBranchBannerTimer) clearTimeout(directBranchBannerTimer)
   // Clean up image preview URL
   if (imagePreviewUrl.value) {
     URL.revokeObjectURL(imagePreviewUrl.value)
+  }
+  // Close persistent terminal connection when leaving the page
+  if (taskId.value) {
+    closePersistentConnection(taskId.value)
   }
 })
 </script>
 
 <template>
-  <div class="h-screen flex flex-col overflow-hidden">
+  <div class="h-dvh flex flex-col overflow-hidden">
     <!-- Full-screen loading overlay -->
     <div v-if="!layoutLoaded" class="fixed inset-0 z-50 flex items-center justify-center bg-main">
       <div class="spinner w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -1844,13 +1903,19 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <!-- Direct on branch notice -->
-    <div v-if="task?.direct_on_branch" class="banner-direct px-4 py-2">
-      <div class="max-w-full mx-auto flex items-center gap-2 text-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <!-- Direct on branch notice - floating banner -->
+    <div v-if="task?.direct_on_branch && !hideDirectBranchBanner"
+         class="banner-direct fixed top-16 right-4 z-50 px-4 py-2 shadow-lg rounded-md max-w-sm bg-slate-100/90 dark:bg-slate-800/90 border border-slate-300/90 dark:border-slate-600/90">
+      <div class="flex items-start gap-2 text-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 mt-0.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
-        <span>This task works directly on main branch.</span>
+        <span class="flex-1 text-slate-700 dark:text-slate-200">This task works directly on main branch.</span>
+        <button @click="hideDirectBranchBanner = true" class="shrink-0 hover:opacity-70 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300" title="Dismiss">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -1864,8 +1929,23 @@ onUnmounted(() => {
           <pane :size="layout.filesPane" :min-size="5" class="flex flex-col min-h-0 bg-main border-r border-main">
             <div class="flex-[1] p-4 border-b border-main overflow-y-auto min-h-0">
               <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-main">Files</h3>
-                <button @click="loadFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
+                <div class="flex gap-1">
+                  <button
+                    @click="activeFilesTab = 'files'"
+                    :class="activeFilesTab === 'files' ? 'tab-active' : 'border-transparent text-sub hover:text-main'"
+                    class="text-sm font-medium px-2 py-1 border-b-2"
+                  >
+                    Files
+                  </button>
+                  <button
+                    @click="activeFilesTab = 'referer'"
+                    :class="activeFilesTab === 'referer' ? 'tab-active' : 'border-transparent text-sub hover:text-main'"
+                    class="text-sm font-medium px-2 py-1 border-b-2"
+                  >
+                    Referer
+                  </button>
+                </div>
+                <button v-if="activeFilesTab === 'files'" @click="loadFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
@@ -1874,18 +1954,25 @@ onUnmounted(() => {
               <div v-if="loadingFiles" class="flex items-center justify-center py-4">
                 <div class="spinner"></div>
               </div>
-              <div v-else class="file-tree text-sm" @click="closeContextMenuOnClick">
-                <FileTreeItem
-                  v-for="path in rootPaths"
-                  :key="path"
-                  :path="path"
-                  :level="0"
-                  @toggle="toggleDir"
-                  @select-file="loadFile"
-                  @show-context-menu="handleShowContextMenu"
-                />
-                <div v-if="rootPaths.length === 0" class="text-xs text-sub py-2">No files found (rootPaths empty)</div>
+              <div v-if="activeFilesTab === 'files'">
+                <div class="file-tree text-sm" @click="closeContextMenuOnClick">
+                  <FileTreeItem
+                    v-for="path in rootPaths"
+                    :key="path"
+                    :path="path"
+                    :level="0"
+                    @toggle="toggleDir"
+                    @select-file="loadFile"
+                    @show-context-menu="handleShowContextMenu"
+                  />
+                  <div v-if="rootPaths.length === 0" class="text-xs text-sub py-2">No files found (rootPaths empty)</div>
+                </div>
               </div>
+              <RefererSearch
+                v-else
+                :task-id="taskId"
+                @select-file="handleSearchSelect"
+              />
             </div>
           </pane>
 
@@ -2033,6 +2120,16 @@ onUnmounted(() => {
                 >
                   <span class="truncate flex-1">{{ task.name }}</span>
                   <span v-if="task.direct_on_branch" class="badge-direct px-1 py-0.5 text-xs rounded shrink-0">Direct</span>
+                  <button
+                    v-if="!task.direct_on_branch"
+                    @click="deleteTask(task.id, $event)"
+                    class="task-delete-btn"
+                    title="Delete task"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                   <span :class="task.task_status === 'running' ? 'text-green-600 dark:text-green-400' : 'text-gray-400'">
                     {{ task.task_status === 'running' ? '🟢' : '⚪' }}
                   </span>
@@ -2324,8 +2421,8 @@ onUnmounted(() => {
             </main>
           </pane>
 
-          <!-- Terminal pane -->
-          <pane v-if="showTerminal && !showFileList" :size="isMobile ? 100 : layout.terminal" :min-size="isMobile ? 100 : 10" class="flex flex-col min-h-0">
+          <!-- Terminal pane - always rendered to keep WebSocket alive, size=0 when hidden -->
+          <pane v-if="!showFileList" :size="showTerminal ? (isMobile ? 100 : layout.terminal) : 0" :min-size="showTerminal ? (isMobile ? 100 : 10) : 0" class="flex flex-col min-h-0">
             <div class="w-full bg-main border-l border-main flex-1 flex flex-col min-h-0">
               <Terminal :key="taskId" :task-id="taskId" />
             </div>
@@ -2651,6 +2748,20 @@ onUnmounted(() => {
         </form>
       </div>
     </div>
+
+    <!-- Delete task confirmation dialog -->
+    <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="cancelDeleteTask">
+      <div class="card max-w-sm w-full">
+        <h3 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Delete Task</h3>
+        <p class="text-sub mb-6">
+          Delete task "<span class="font-medium text-main">{{ deleteTargetTask?.name }}</span>"? This action cannot be undone.
+        </p>
+        <div class="flex gap-3">
+          <button @click="cancelDeleteTask" class="btn btn-secondary flex-1">Cancel</button>
+          <button @click="confirmDeleteTask" class="btn btn-danger flex-1">Delete</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -2692,19 +2803,23 @@ export default {
 }
 
 /* Strong hover effect */
-.splitpanes.default-theme .splitpanes__splitter:hover {
-  background-color: #3b82f6;
-  border-color: #2563eb;
+@media (hover: hover) {
+  .splitpanes.default-theme .splitpanes__splitter:hover {
+    background-color: var(--splitter-hover);
+    border-color: var(--splitter-active);
+  }
 }
 
-.splitpanes.default-theme .splitpanes__splitter:hover:before,
-.splitpanes.default-theme .splitpanes__splitter:hover:after {
-  background-color: rgba(255, 255, 255, 0.8);
+@media (hover: hover) {
+  .splitpanes.default-theme .splitpanes__splitter:hover:before,
+  .splitpanes.default-theme .splitpanes__splitter:hover:after {
+    background-color: var(--splitter-handle);
+  }
 }
 
 /* Active dragging state */
 .splitpanes.default-theme.splitpanes--dragging .splitpanes__splitter {
-  background-color: #2563eb;
+  background-color: var(--splitter-active);
 }
 
 /* Disable all transitions and animations for panes */
@@ -2713,41 +2828,72 @@ export default {
   animation: none !important;
 }
 
-/* Status badge styles */
+/* Status badge styles - theme-aware using CSS variables */
 .status-badge {
   @apply px-1.5 py-0.5 rounded text-xs font-mono font-medium min-w-[20px] text-center;
   flex-shrink: 0;
 }
 
 .status-a {
-  @apply bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400;
+  background-color: var(--badge-added-bg);
+  color: var(--badge-added-text);
 }
 
 .status-m {
-  @apply bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400;
+  background-color: var(--badge-modified-bg);
+  color: var(--badge-modified-text);
 }
 
 .status-d {
-  @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+  background-color: var(--badge-deleted-bg);
+  color: var(--badge-deleted-text);
 }
 
 .status-r {
-  @apply bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400;
+  background-color: var(--badge-renamed-bg);
+  color: var(--badge-renamed-text);
 }
 
 .status-c {
-  @apply bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400;
+  background-color: var(--badge-copied-bg);
+  color: var(--badge-copied-text);
 }
 
 .status-u {
-  @apply bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400;
+  background-color: var(--badge-untracked-bg);
+  color: var(--badge-untracked-text);
 }
 
 .status-t {
-  @apply bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400;
+  background-color: var(--badge-typed-bg);
+  color: var(--badge-typed-text);
 }
 
 .status-\? {
-  @apply bg-gray-50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-500;
+  background-color: var(--badge-typed-bg);
+  color: var(--badge-typed-text);
+}
+
+/* Task delete button */
+.task-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: all 0.15s;
+}
+@media (hover: hover) {
+  .task-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+  }
 }
 </style>
