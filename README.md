@@ -1,252 +1,61 @@
 # Vibe2Crazy - Remote Code Editing Tool
 
-A single-user remote code editing and collaboration tool with Git worktree isolation, persistent terminal sessions, and web-based code review.
+Access your development environment from anywhere. Edit code and run terminals remotely through your browser.
 
-## Features
+## Key Features
 
-- **Authentication**: Simple password-based login
-- **Project Management**: Create and manage Git-based projects
-- **Task Isolation**: Each task gets its own Git worktree and tmux session
-- **Persistent Terminals**: Web-based terminals that survive page refreshes
-- **Code Review**: Built-in diff viewer and editor
-- **One-Click Merge**: Squash merge changes to main branch
-- **Dark/Light Theme**: Toggle between themes
-- **Responsive Design**: Works on desktop and mobile
-
-## Tech Stack
-
-- **Frontend**: Vue 3 + Vite + TypeScript
-- **Backend**: Python + FastAPI + WebSocket
-- **Database**: SQLite + SQLAlchemy
-- **Terminal**: tmux + WebSocket (WebSSH2-style)
-- **Editor**: Monaco Editor (VS Code's editor)
+- **Remote Access** - Connect to your code projects on remote servers via browser
+- **Remote Terminal** - Full Linux terminal in web page with persistent tmux sessions
+- **Code Editor** - VS Code's Monaco editor with syntax highlighting and diff viewer
+- **Git Management** - One-click task branches, one-click merge to main
 
 ## Quick Start
 
-### Prerequisites
+### Login
 
-- Python 3.10+
-- Node.js 18+
-- Git
-  git config --global user.email "you@example.com"
-  git config --global user.name "Your Name"
-- tmux
+Visit the website and enter your password.
 
-### Installation
+### Create Project
 
-1. **Clone the repository**
-```bash
-git clone <repo-url>
-cd vibe2crazy
-```
+1. Click "New Project"
+2. Enter project name
+3. Select or enter a Git repository path (auto-create Git repo supported)
+4. Save project
 
-2. **Set up the backend**
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+### Create Task
 
-3. **Set up the frontend**
-```bash
-cd ../frontend
-npm install
-```
+Each task creates an independent Git branch and working directory.
 
-4. **Configure environment**
-```bash
-cd ..
-cp backend/.env.example backend/.env
-# Edit backend/.env and set your password
-```
+1. Enter project, click "New Task"
+2. Enter task name
+3. Terminal opens automatically after task creation
 
-5. **Initialize database**
-```bash
-cd backend
-source venv/bin/activate
-python -c "from app.database import init_db; init_db()"
-```
+### Use Terminal
 
-### Development
+- Terminal connects to task's isolated working directory
+- Full Linux commands supported
+- Session persists across page refreshes
+- Switch tasks anytime, terminal keeps running in background
 
-**Start backend** (from backend directory):
-```bash
-source venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8863
-```
+### Code Review & Merge
 
-**Start frontend** (from frontend directory):
-```bash
-npm run dev
-```
+1. Click "Code Review" to enter editor
+2. View changed files and code differences
+3. Click "Merge" button when ready
+4. Code merges to main branch automatically, task completed
 
-Access the application at `http://localhost:5173`
+## Use Cases
 
-### Deployment
+- **Remote Work** - Access office dev environment from home or during travel
+- **Multi-Device** - Access same dev environment from PC, tablet, or phone
+- **Parallel Development** - Multiple tasks run simultaneously without interference
+- **Claude Code** - Use Claude Code CLI for AI-assisted programming in remote environment
 
-The project includes a deployment script that supports both development and production modes.
+## Access URL
 
-#### Development Mode
+Development: `http://your-server:5173`
+Production: `http://your-server:8864`
 
-```bash
-./deploy.sh start      # 启动开发模式 (前端 5173, 后端 8863)
-./deploy.sh stop       # 停止开发模式
-./deploy.sh restart    # 重启开发模式
-./deploy.sh status     # 查看开发模式状态
-```
+## Support
 
-#### Production Mode
-
-```bash
-./deploy.sh start-prod     # 启动生产模式 (前端 8864, 后端 8863)
-./deploy.sh stop-prod      # 停止生产模式
-./deploy.sh restart-prod   # 重启生产模式
-./deploy.sh status-prod    # 查看生产模式状态
-./deploy.sh build          # 仅构建前端
-```
-
-#### Combined Commands
-
-```bash
-./deploy.sh status-all    # 查看所有服务状态（开发+生产）
-```
-
-#### Simultaneous Operation
-
-开发和生产模式可以同时运行在不同端口上：
-- **开发模式**: 前端 5173 (Vite dev server), 后端 8863 (Uvicorn with auto-reload)
-- **生产模式**: 前端 8864 (Python http.server), 后端 8863 (Uvicorn)
-
-This allows you to run development mode for active work while keeping production mode available for testing or demonstration.
-
-#### Logging
-
-日志文件位置：
-- 开发模式: `logs/frontend.log`, `logs/backend.log`
-- 生产模式: `logs/frontend-prod.log`, `logs/backend-prod.log`
-
-### Production (Manual)
-
-**Build frontend**:
-```bash
-cd frontend
-npm run build
-```
-
-**Run backend**:
-```bash
-cd backend
-source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8863
-```
-
-Or use the provided systemd service (see `deploy/vibe2crazy.service`).
-
-## Configuration
-
-Environment variables (see `backend/.env`):
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VIBE2CRAZY_PASSWORD` | Login password | `password` |
-| `PROJECTS_DIR` | Directory for worktrees | `./projects` |
-| `DATABASE_URL` | SQLite database path | `sqlite:///./data/vibe2crazy.db` |
-| `GIT_DEFAULT_BRANCH` | Default Git branch | `main` |
-| `SESSION_EXPIRE_HOURS` | Session expiration | `24` |
-
-## Usage
-
-1. **Login** with your configured password
-2. **Create a Project** pointing to an existing Git repository
-3. **Create a Task** - this creates a Git worktree and tmux session
-4. **Open the Terminal** to run commands (e.g., `claude code cli`)
-5. **Review Changes** in the code editor
-6. **Merge** your changes to the main branch
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (Vue)                        │
-│  Login | Projects | Tasks | Code Review + Monaco Editor     │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                    HTTP/WebSocket
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                    Backend (FastAPI)                         │
-│  Auth | Projects | Tasks | Files | Git | WebSocket Terminal  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                      System Resources                        │
-│  Git Worktree | Tmux Sessions | SQLite Database              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Project Structure
-
-```
-vibe2crazy/
-├── backend/           # Python FastAPI backend
-│   └── app/
-│       ├── main.py           # FastAPI application
-│       ├── models.py         # SQLAlchemy models
-│       ├── schemas.py        # Pydantic schemas
-│       ├── routers/          # API endpoints
-│       ├── services/         # Git, Tmux, File services
-│       └── websocket/        # WebSocket terminal handler
-├── frontend/          # Vue 3 frontend
-│   └── src/
-│       ├── views/            # Page components
-│       ├── components/       # Reusable components
-│       ├── composables/      # Vue composition functions
-│       ├── api/              # API client
-│       └── router/           # Vue Router config
-├── projects/           # Git worktrees storage
-└── data/               # SQLite database
-```
-
-## Development
-
-### Running Tests
-
-Backend:
-```bash
-cd backend
-pytest
-```
-
-Frontend:
-```bash
-cd frontend
-npm run lint
-```
-
-### Adding New Features
-
-1. Backend: Add router in `backend/app/routers/`
-2. Frontend: Add view in `frontend/src/views/`
-3. Update API client in `frontend/src/api/`
-
-## Security
-
-- Password stored in environment variable (not in code)
-- Session tokens with expiration
-- Path validation to prevent directory traversal
-- WebSocket authentication required
-
-## Limitations
-
-- Single-user only (no multi-user support)
-- Manual merge conflict resolution required
-- No code review comments/annotations
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions welcome! Please open an issue or PR.
+Contact your administrator for assistance.
