@@ -41,6 +41,8 @@ interface PersistentConnection {
   pendingResize: { cols: number; rows: number } | null
   taskId: string
   refCount: number // Number of components using this connection
+  unsubscribeVisibility: (() => void) | null
+  unsubscribeOnline: (() => void) | null
 }
 
 // Global map of active connections keyed by taskId
@@ -79,6 +81,16 @@ export function closePersistentConnection(taskId: string): void {
     conn.unsubscribeNetwork = null
   }
 
+  if (conn.unsubscribeVisibility) {
+    conn.unsubscribeVisibility()
+    conn.unsubscribeVisibility = null
+  }
+
+  if (conn.unsubscribeOnline) {
+    conn.unsubscribeOnline()
+    conn.unsubscribeOnline = null
+  }
+
   globalConnections.delete(taskId)
 }
 
@@ -90,14 +102,17 @@ export interface UseWebSocketOptions {
 export function useWebSocket(taskId: string, options?: UseWebSocketOptions) {
   const { token } = useAuth()
 
+  // Guard against undefined taskId - happens when route.query.task is not yet resolved
+  const isTaskIdValid = taskId && taskId !== 'undefined'
+
   // Check if a persistent connection already exists for this taskId
-  let existing = globalConnections.get(taskId)
+  let existing = isTaskIdValid ? globalConnections.get(taskId) : undefined
 
   if (existing) {
     existing.refCount++
     console.log(`[useWebSocket] Reusing existing connection for task: ${taskId} (refCount: ${existing.refCount})`)
-  } else {
-    // Create new persistent connection
+  } else if (isTaskIdValid) {
+    // Create new persistent connection only for valid taskIds
     existing = {
       ws: null,
       connected: shallowRef(false),
@@ -112,15 +127,43 @@ export function useWebSocket(taskId: string, options?: UseWebSocketOptions) {
       unsubscribeNetwork: null,
       pendingResize: null,
       taskId,
-      refCount: 1
+      refCount: 1,
+      unsubscribeVisibility: null,
+      unsubscribeOnline: null
     }
     globalConnections.set(taskId, existing)
     console.log(`[useWebSocket] Created new persistent connection for task: ${taskId}`)
+  } else {
+    console.warn(`[useWebSocket] Skipping connection for invalid taskId: ${taskId}`)
+    existing = {
+      ws: null,
+      connected: shallowRef(false),
+      connecting: shallowRef(false),
+      output: shallowRef<string[]>([]),
+      error: shallowRef<string | null>(null),
+      connectionType: shallowRef<AddressType>('public'),
+      isIntentionalClose: true,
+      reconnectTimeout: null,
+      onDataCallback: null,
+      messageHandlers: new Map(),
+      unsubscribeNetwork: null,
+      pendingResize: null,
+      taskId: taskId || '',
+      refCount: 1,
+      unsubscribeVisibility: null,
+      unsubscribeOnline: null
+    }
   }
 
   const conn = existing
 
-  const connect = (onData?: (data: string) => void) => {
+  const connect = (onData?: (data: string) => void, initialSize?: { cols: number; rows: number }) => {
+    // Skip connection if taskId is invalid
+    if (!isTaskIdValid) {
+      console.warn(`[useWebSocket] Cannot connect: invalid taskId`)
+      return
+    }
+
     // If already connected, just update callback
     if (conn.ws && conn.ws.readyState === WebSocketState.OPEN) {
       if (onData) conn.onDataCallback = onData
@@ -157,8 +200,12 @@ export function useWebSocket(taskId: string, options?: UseWebSocketOptions) {
     conn.isIntentionalClose = false
     conn.connectionType.value = wsNetworkManager.getType()
 
-    // Get WebSocket URL from network manager
-    const wsUrl = wsNetworkManager.getWsUrl(`/terminal?token=${token.value}&task_id=${taskId}`)
+    // Build WebSocket URL with optional initial size params
+    let path = `/terminal?token=${token.value}&task_id=${taskId}`
+    if (initialSize) {
+      path += `&cols=${initialSize.cols}&rows=${initialSize.rows}`
+    }
+    const wsUrl = wsNetworkManager.getWsUrl(path)
 
     try {
       conn.ws = new WebSocket(wsUrl)
@@ -178,6 +225,11 @@ export function useWebSocket(taskId: string, options?: UseWebSocketOptions) {
       conn.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data)
+          // Handle heartbeat ping from server
+          if (msg.type === 'ping') {
+            conn.ws?.send(JSON.stringify({ type: 'pong' }))
+            return
+          }
           if (msg.type === 'output') {
             conn.output.value.push(msg.data)
             // Call callback if registered
@@ -255,6 +307,16 @@ export function useWebSocket(taskId: string, options?: UseWebSocketOptions) {
       conn.unsubscribeNetwork = null
     }
 
+    if (conn.unsubscribeVisibility) {
+      conn.unsubscribeVisibility()
+      conn.unsubscribeVisibility = null
+    }
+
+    if (conn.unsubscribeOnline) {
+      conn.unsubscribeOnline()
+      conn.unsubscribeOnline = null
+    }
+
     // Remove from global pool
     globalConnections.delete(taskId)
   }
@@ -267,6 +329,33 @@ export function useWebSocket(taskId: string, options?: UseWebSocketOptions) {
       connect(onData)
     }, delayMs)
   }
+
+  // Setup visibility/online listeners for mobile reconnection
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      if (!conn.ws || conn.ws.readyState !== WebSocketState.OPEN) {
+        console.log(`[useWebSocket] Visibility changed to visible, reconnecting...`)
+        if (token.value) connect(conn.onDataCallback || undefined)
+      }
+    }
+  }
+
+  const handleOnline = () => {
+    if (!conn.ws || conn.ws.readyState !== WebSocketState.OPEN) {
+      console.log(`[useWebSocket] Network online, reconnecting...`)
+      if (token.value) connect(conn.onDataCallback || undefined)
+    }
+  }
+
+  conn.unsubscribeVisibility = () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }
+  conn.unsubscribeOnline = () => {
+    window.removeEventListener('online', handleOnline)
+  }
+
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('online', handleOnline)
 
   /**
    * Setup network change listener - reconnect when switching between LAN/public

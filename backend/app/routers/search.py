@@ -15,6 +15,7 @@ class SearchRequest(BaseModel):
     query: str
     page: int = 1
     per_page: int = 20
+    current_file: str = None
 
 
 class SearchMatch(BaseModel):
@@ -25,7 +26,8 @@ class SearchMatch(BaseModel):
 
 class SearchResult(BaseModel):
     results: list[SearchMatch]
-    total: int
+    total: int  # 文件数（用于分页）
+    total_matches: int  # 匹配数（用于显示）
     cached: bool
 
 
@@ -40,7 +42,8 @@ def grep_search(request: SearchRequest, db: Session = Depends(get_db)):
         worktree_path=task.worktree_path,
         query=request.query,
         page=request.page,
-        per_page=request.per_page
+        per_page=request.per_page,
+        current_file=request.current_file
     )
 
     if "error" in data:
@@ -49,6 +52,7 @@ def grep_search(request: SearchRequest, db: Session = Depends(get_db)):
     return SearchResult(
         results=[SearchMatch(**r) for r in data["results"]],
         total=data["total"],
+        total_matches=data.get("total_matches", data["total"]),
         cached=data["cached"]
     )
 

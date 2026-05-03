@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import QRCode from 'qrcode'
 import { useTunnel } from '@/composables/useTunnel'
 
 const {
   status,
   remoteUrl,
   token,
-  serverUrl,
   lastError,
   loading,
   saveToken,
@@ -18,6 +18,32 @@ const {
 const newToken = ref('')
 const showConfig = ref(false)
 const saveSuccess = ref(false)
+const qrCodeVisible = ref(false)
+const qrDataUrl = ref('')
+
+// Generate QR code when remoteUrl changes
+watch(remoteUrl, async (url) => {
+  console.log('[QR] remoteUrl changed:', url)
+  if (url) {
+    try {
+      const dataUrl = await QRCode.toDataURL(url, {
+        width: 150,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      })
+      qrDataUrl.value = dataUrl
+      console.log('[QR] Generated QR dataUrl, length:', dataUrl.length)
+    } catch (e) {
+      console.error('[QR] QR code generation failed:', e)
+    }
+  } else {
+    qrDataUrl.value = ''
+    console.log('[QR] No URL, cleared qrDataUrl')
+  }
+}, { immediate: true })
 
 const isConnected = computed(() => status.value === 'connected')
 const isConnecting = computed(() => status.value === 'connecting')
@@ -75,54 +101,85 @@ const handleStop = async () => {
 const handleCopyUrl = async () => {
   await copyRemoteUrl()
 }
+
+const showQrCode = () => {
+  console.log('[QR] showQrCode called, remoteUrl:', remoteUrl.value, 'qrDataUrl:', qrDataUrl.value?.length)
+  if (remoteUrl.value && qrDataUrl.value) {
+    qrCodeVisible.value = true
+    console.log('[QR] qrCodeVisible set to true')
+  } else {
+    console.log('[QR] conditions not met, qrCodeVisible stays false')
+  }
+}
+
+const hideQrCode = () => {
+  qrCodeVisible.value = false
+}
 </script>
 
 <template>
   <div class="tunnel-panel mb-4 p-4 border rounded-lg bg-main border-main">
-    <!-- Header row -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-2">
-          <div :class="statusColor" class="w-3 h-3 rounded-full"></div>
-          <span class="text-sm font-medium text-main">Remote Access</span>
-          <span class="text-xs text-sub">({{ statusText }})</span>
-        </div>
-        <a
-          v-if="serverUrl"
-          :href="serverUrl"
-          target="_blank"
-          class="text-sm text-primary hover:underline"
-        >
-          Get token
-        </a>
+    <!-- Header row: responsive layout -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+    <!-- Status info -->
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <div :class="statusColor" class="w-3 h-3 rounded-full"></div>
+        <span class="text-sm font-medium text-main">Remote Access</span>
+        <span class="text-xs text-sub">({{ statusText }})</span>
       </div>
-
-      <!-- Remote URL when connected -->
-      <div v-if="isConnected && remoteUrl" class="flex items-center gap-2 text-sm">
-        <span class="text-muted">URL:</span>
-        <a :href="remoteUrl" target="_blank" class="link text-primary">{{ remoteUrl }}</a>
-        <button @click="handleCopyUrl" class="p-1 hover:bg-sub rounded" title="Copy URL">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-        </button>
-        <button
-          @click="openConfig"
-          class="text-sm text-primary hover:underline"
-        >
-          Edit
-        </button>
-      </div>
-
-      <!-- Configure button when disconnected -->
-      <button
-        v-if="!isConnected && !showConfig"
-        @click="openConfig"
+      <a
+        href="https://vibe2crazy.com/login"
+        target="_blank"
         class="text-sm text-primary hover:underline"
       >
-        Configure
+        Get token
+      </a>
+    </div>
+
+    <!-- Remote URL when connected -->
+    <div v-if="isConnected && remoteUrl" class="flex items-center gap-2 text-sm relative">
+      <span class="text-muted">URL:</span>
+      <a
+        :href="remoteUrl"
+        target="_blank"
+        class="link text-primary truncate max-w-[200px] sm:max-w-none"
+        @mouseenter="showQrCode"
+        @mouseleave="hideQrCode"
+      >
+        {{ remoteUrl }}
+      </a>
+      <!-- QR Code Tooltip (outside truncate element) -->
+      <div
+        v-if="qrCodeVisible && qrDataUrl"
+        class="absolute top-full left-8 mt-2 p-3 rounded-lg shadow-lg z-50"
+        style="background-color: var(--bg-primary); border: 1px solid var(--border-color);"
+      >
+        <img :src="qrDataUrl" class="w-[150px] h-[150px]" alt="QR Code" />
+        <p class="text-xs text-muted mt-2 text-center">Scan to visit</p>
+      </div>
+      <button @click="handleCopyUrl" class="p-1 hover:bg-sub rounded shrink-0" title="Copy URL">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      </button>
+      <button
+        @click="openConfig"
+        class="text-sm text-primary hover:underline shrink-0"
+      >
+        Edit
       </button>
     </div>
+
+    <!-- Configure button when disconnected -->
+    <button
+      v-if="!isConnected && !showConfig"
+      @click="openConfig"
+      class="text-sm text-primary hover:underline sm:ml-auto"
+    >
+      Configure
+    </button>
+  </div>
 
     <!-- Config form -->
     <div v-if="showConfig" class="mt-4 space-y-3">

@@ -109,8 +109,8 @@ class TunnelConfig(Base):
     id = Column(Integer, primary_key=True)  # Single row only (id=1)
     token = Column(String(64), nullable=True)  # 64-char hex token from server
     server_url = Column(String(255), nullable=True)  # Optional override for .env TUNNEL_SERVER_URL
-    use_tls = Column(Boolean, default=True)
-    verify_tls = Column(Boolean, default=False)
+    use_tls = Column(Boolean, default=True, server_default="1")
+    verify_tls = Column(Boolean, default=False, server_default="0")
     status = Column(String(20), default="disabled")  # disabled, connecting, connected, disconnected
     remote_url = Column(String(255), nullable=True)  # Assigned remote access URL
     last_error = Column(Text, nullable=True)

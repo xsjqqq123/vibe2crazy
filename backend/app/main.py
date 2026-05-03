@@ -17,6 +17,7 @@ from app.websocket.manager import manager
 from app.auth import verify_token
 from app.models import Session as SessionModel, TunnelConfig
 import json
+import time
 
 # Setup logging
 from app.logging_config import setup_logging, logger
@@ -28,6 +29,17 @@ from app.rate_limiters import auth_rate_limiter, default_rate_limiter
 
 # Re-export for other modules
 __all__ = ['auth_rate_limiter', 'default_rate_limiter']
+
+
+async def _ws_heartbeat(websocket: WebSocket, last_activity: list, interval: float = 15.0):
+    """Send ping only when connection is idle, to keep NAT/firewall alive."""
+    while True:
+        await asyncio.sleep(interval)
+        if time.monotonic() - last_activity[0] >= interval:
+            try:
+                await websocket.send_json({"type": "ping"})
+            except Exception:
+                break
 
 
 def get_frontend_path() -> Path | None:
@@ -183,7 +195,7 @@ async def start_tunnel_service():
     try:
         config = db.query(TunnelConfig).filter(TunnelConfig.id == 1).first()
         if not config:
-            config = TunnelConfig(id=1, status="disabled")
+            config = TunnelConfig(id=1, status="disabled", use_tls=True)
             db.add(config)
             db.commit()
             db.refresh(config)
@@ -211,10 +223,12 @@ async def health():
 async def websocket_terminal(
     websocket: WebSocket,
     token: str = Query(...),
-    task_id: str = Query(...)
+    task_id: str = Query(...),
+    cols: int = Query(80),
+    rows: int = Query(24)
 ):
     """WebSocket endpoint for terminal access"""
-    logger.info(f"WebSocket connection request - task_id: {task_id}")
+    logger.info(f"WebSocket connection request - task_id: {task_id}, size: {cols}x{rows}")
     await websocket.accept()
 
     # Verify token first (no database needed)
@@ -255,7 +269,8 @@ async def websocket_terminal(
             self.tmux_session = info['tmux_session']
             self.worktree_path = info['worktree_path']
 
-    terminal = WebSocketTerminal(websocket, TaskInfo(task_info))
+    terminal = WebSocketTerminal(websocket, TaskInfo(task_info), initial_cols=cols, initial_rows=rows)
+    last_activity = [time.monotonic()]  # Track last client activity for idle heartbeat
 
     try:
         # Register connection with manager
@@ -263,6 +278,9 @@ async def websocket_terminal(
 
         logger.info(f"Terminal started for task: {task_id}")
         await terminal.start()
+
+        # Start heartbeat task (sends ping only when idle > 15s)
+        heartbeat_task = asyncio.create_task(_ws_heartbeat(websocket, last_activity))
 
         # Handle incoming messages
         while True:
@@ -275,8 +293,10 @@ async def websocket_terminal(
                         msg = json.loads(message)
 
                         if msg.get("type") == "input":
+                            last_activity[0] = time.monotonic()
                             await terminal.handle_input(msg.get("data", ""))
                         elif msg.get("type") == "resize":
+                            last_activity[0] = time.monotonic()
                             await terminal.handle_resize(
                                 msg.get("cols", 80),
                                 msg.get("rows", 24)
@@ -287,16 +307,20 @@ async def websocket_terminal(
                                 logger.info(f"Received scroll_mode: action={action}")
                                 await terminal.handle_scroll_mode(action)
                         elif msg.get("type") == "scroll":
+                            last_activity[0] = time.monotonic()
                             direction = msg.get("direction")
                             page = msg.get("page", False)
                             if direction in ("up", "down"):
                                 logger.info(f"Received scroll: direction={direction}, page={page}")
                                 await terminal.handle_scroll(direction, page)
+                        elif msg.get("type") == "pong":
+                            pass  # Heartbeat response - ignore
 
                     except json.JSONDecodeError:
                         pass
                 elif "bytes" in data:
                     # Raw bytes input
+                    last_activity[0] = time.monotonic()
                     await terminal.handle_input(data["bytes"].decode("utf-8"))
 
             except (WebSocketDisconnect, RuntimeError) as e:
@@ -311,6 +335,12 @@ async def websocket_terminal(
     except Exception as e:
         logger.error(f"WebSocket setup failed - task_id: {task_id}, error: {str(e)}")
     finally:
+        # Cancel heartbeat
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
         # Ensure terminal is closed and resources are cleaned up
         if 'terminal' in locals():
             await terminal.close()
@@ -322,10 +352,12 @@ async def websocket_terminal(
 @app.websocket("/ws/global-terminal")
 async def websocket_global_terminal(
     websocket: WebSocket,
-    token: str = Query(...)
+    token: str = Query(...),
+    cols: int = Query(80),
+    rows: int = Query(24)
 ):
     """WebSocket endpoint for global terminal access"""
-    logger.info("Global terminal WebSocket connection request")
+    logger.info(f"Global terminal WebSocket connection request - size: {cols}x{rows}")
     await websocket.accept()
 
     # Verify token
@@ -335,11 +367,15 @@ async def websocket_global_terminal(
         return
 
     from app.websocket.global_terminal import GlobalWebSocketTerminal
-    terminal = GlobalWebSocketTerminal(websocket)
+    terminal = GlobalWebSocketTerminal(websocket, initial_cols=cols, initial_rows=rows)
+    last_activity = [time.monotonic()]  # Track last client activity for idle heartbeat
 
     try:
         logger.info("Global terminal started")
         await terminal.start()
+
+        # Start heartbeat task (sends ping only when idle > 15s)
+        heartbeat_task = asyncio.create_task(_ws_heartbeat(websocket, last_activity))
 
         while True:
             try:
@@ -351,8 +387,10 @@ async def websocket_global_terminal(
                         msg = json.loads(message)
 
                         if msg.get("type") == "input":
+                            last_activity[0] = time.monotonic()
                             await terminal.handle_input(msg.get("data", ""))
                         elif msg.get("type") == "resize":
+                            last_activity[0] = time.monotonic()
                             await terminal.handle_resize(
                                 msg.get("cols", 80),
                                 msg.get("rows", 24)
@@ -362,14 +400,18 @@ async def websocket_global_terminal(
                             if action in ("enter", "exit"):
                                 await terminal.handle_scroll_mode(action)
                         elif msg.get("type") == "scroll":
+                            last_activity[0] = time.monotonic()
                             direction = msg.get("direction")
                             page = msg.get("page", False)
                             if direction in ("up", "down"):
                                 await terminal.handle_scroll(direction, page)
+                        elif msg.get("type") == "pong":
+                            pass  # Heartbeat response - ignore
 
                     except json.JSONDecodeError:
                         pass
                 elif "bytes" in data:
+                    last_activity[0] = time.monotonic()
                     await terminal.handle_input(data["bytes"].decode("utf-8"))
 
             except WebSocketDisconnect as e:
@@ -388,6 +430,11 @@ async def websocket_global_terminal(
     except Exception as e:
         logger.error(f"Global terminal WebSocket setup failed: {str(e)}")
     finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
         await terminal.close()
         logger.info("Global terminal WebSocket connection closed")
 
@@ -397,10 +444,12 @@ async def websocket_matrix_terminal(
     websocket: WebSocket,
     token: str = Query(...),
     index: int = Query(...),
-    session: str = Query(None)
+    session: str = Query(None),
+    cols: int = Query(80),
+    rows: int = Query(24)
 ):
     """WebSocket endpoint for matrix terminal access"""
-    logger.info(f"Matrix terminal WebSocket connection request - index: {index}, session: {session}")
+    logger.info(f"Matrix terminal WebSocket connection request - index: {index}, session: {session}, size: {cols}x{rows}")
     await websocket.accept()
 
     # Verify token
@@ -413,11 +462,15 @@ async def websocket_matrix_terminal(
     session_name = session if session else f"v2d-matrix-{index}"
 
     from app.websocket.matrix_terminal import MatrixWebSocketTerminal
-    terminal = MatrixWebSocketTerminal(websocket, session_name, index)
+    terminal = MatrixWebSocketTerminal(websocket, session_name, index, initial_cols=cols, initial_rows=rows)
+    last_activity = [time.monotonic()]  # Track last client activity for idle heartbeat
 
     try:
         logger.info(f"Matrix terminal {index} started")
         await terminal.start()
+
+        # Start heartbeat task (sends ping only when idle > 15s)
+        heartbeat_task = asyncio.create_task(_ws_heartbeat(websocket, last_activity))
 
         while True:
             try:
@@ -429,8 +482,10 @@ async def websocket_matrix_terminal(
                         msg = json.loads(message)
 
                         if msg.get("type") == "input":
+                            last_activity[0] = time.monotonic()
                             await terminal.handle_input(msg.get("data", ""))
                         elif msg.get("type") == "resize":
+                            last_activity[0] = time.monotonic()
                             await terminal.handle_resize(
                                 msg.get("cols", 80),
                                 msg.get("rows", 24)
@@ -440,14 +495,18 @@ async def websocket_matrix_terminal(
                             if action in ("enter", "exit"):
                                 await terminal.handle_scroll_mode(action)
                         elif msg.get("type") == "scroll":
+                            last_activity[0] = time.monotonic()
                             direction = msg.get("direction")
                             page = msg.get("page", False)
                             if direction in ("up", "down"):
                                 await terminal.handle_scroll(direction, page)
+                        elif msg.get("type") == "pong":
+                            pass  # Heartbeat response - ignore
 
                     except json.JSONDecodeError:
                         pass
                 elif "bytes" in data:
+                    last_activity[0] = time.monotonic()
                     await terminal.handle_input(data["bytes"].decode("utf-8"))
 
             except WebSocketDisconnect as e:
@@ -466,6 +525,11 @@ async def websocket_matrix_terminal(
     except Exception as e:
         logger.error(f"Matrix terminal {index} WebSocket setup failed: {str(e)}")
     finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
         await terminal.close()
         logger.info(f"Matrix terminal {index} WebSocket connection closed")
 
@@ -492,3 +556,43 @@ async def serve_spa(request: Request, full_path: str):
         if index_file.exists():
             return FileResponse(str(index_file))
     return {"detail": "Frontend not available"}
+
+
+def run_dual_stack(host: str = "0.0.0.0", port: int = 8863):
+    """Run the backend with dual-stack HTTP/HTTPS support.
+
+    Starts an internal uvicorn on a high port, then runs a dual-stack
+    TCP proxy on the external port that auto-detects TLS connections.
+    """
+    from app.tls_utils import ensure_self_signed_cert, DualStackProxy, create_ssl_context, INTERNAL_PORT
+    import uvicorn
+
+    # Generate self-signed cert if needed
+    data_dir = Path(settings.database_url.replace("sqlite:///", "")).parent
+    cert_path, key_path = ensure_self_signed_cert(data_dir)
+    ssl_ctx = create_ssl_context(cert_path, key_path)
+
+    # Start dual-stack proxy on external port -> internal port
+    proxy = DualStackProxy(
+        external_port=port,
+        internal_host="127.0.0.1",
+        internal_port=INTERNAL_PORT,
+        ssl_ctx=ssl_ctx,
+    )
+    proxy.start()
+
+    logger.info("Dual-stack server: external :%d (HTTP+HTTPS) -> internal :%d (HTTP)", port, INTERNAL_PORT)
+
+    try:
+        uvicorn.run(
+            "app:app",
+            host="127.0.0.1",
+            port=INTERNAL_PORT,
+            log_level="info",
+        )
+    finally:
+        proxy.stop()
+
+
+if __name__ == "__main__":
+    run_dual_stack()

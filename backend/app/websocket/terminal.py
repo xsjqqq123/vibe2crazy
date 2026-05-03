@@ -25,14 +25,14 @@ SIZE_ROWS = 24
 class WebSocketTerminal:
     """WebSocket terminal handler for tmux sessions"""
 
-    def __init__(self, websocket: WebSocket, task: Task):
+    def __init__(self, websocket: WebSocket, task: Task, initial_cols: int = SIZE_COLS, initial_rows: int = SIZE_ROWS):
         self.websocket = websocket
         self.task = task
         self.fd: Optional[int] = None
         self.pid: Optional[int] = None
         self.running = False
-        self.cols = SIZE_COLS
-        self.rows = SIZE_ROWS
+        self.cols = initial_cols
+        self.rows = initial_rows
 
     async def start(self):
         """Start terminal session"""
@@ -55,9 +55,9 @@ class WebSocketTerminal:
             # Create pseudoterminal
             self.fd, slave_fd = pty.openpty()
 
-            # Set terminal size to default initially
-            self._set_pty_size(self.fd, SIZE_ROWS, SIZE_COLS)
-            logger.info(f"PTY created with default size: {SIZE_COLS}x{SIZE_ROWS}")
+            # Set terminal size (use initial size from client if provided)
+            self._set_pty_size(self.fd, self.rows, self.cols)
+            logger.info(f"PTY created with size: {self.cols}x{self.rows}")
 
             # Attach to existing tmux session (do NOT create grouped session)
             # Using 'tmux attach' connects to the existing window with its history intact
@@ -207,10 +207,10 @@ class WebSocketTerminal:
         try:
             if action == 'enter':
                 # Enter tmux copy-mode for scrolling history
-                # Use -e flag to position at the bottom of history
+                # copy-mode without -e enters at the bottom of history
                 # This way we can scroll up into history
                 result = subprocess.run(
-                    ['tmux', 'copy-mode', '-e', '-t', session_name],
+                    ['tmux', 'copy-mode', '-t', session_name],
                     capture_output=True,
                     text=True,
                     timeout=2,

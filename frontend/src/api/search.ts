@@ -8,7 +8,8 @@ export interface SearchMatch {
 
 export interface SearchResult {
   results: SearchMatch[]
-  total: number
+  total: number  // 文件数（用于分页）
+  total_matches: number  // 匹配数（用于显示）
   cached: boolean
 }
 
@@ -17,6 +18,7 @@ export interface SearchRequest {
   query: string
   page?: number
   per_page?: number
+  current_file?: string
 }
 
 const searchApi = {

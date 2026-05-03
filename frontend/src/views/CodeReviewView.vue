@@ -27,10 +27,6 @@ import { detectLanguage, supportsSymbolExtraction } from '@/utils/languageDetect
 import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
 import { closePersistentConnection } from '@/composables/useWebSocket'
 
-interface ButtonStates {
-  can_accept: boolean
-  can_merge: boolean
-}
 
 interface Layout {
   sidebar: number
@@ -56,6 +52,14 @@ const tasks = ref<Task[]>([])
 const tasksLoading = ref(false)
 const activeTab = ref<'changes' | 'commits'>('changes')
 const activeFilesTab = ref<'files' | 'referer'>('files')
+
+// Referer search state (lifted to preserve across tab switches)
+const refererQuery = ref('')
+const refererResults = ref<{ file: string; line: number; content: string }[]>([])
+const refererTotal = ref(0)
+const refererTotalMatches = ref(0)
+const refererPage = ref(1)
+const refererExpandedFiles = ref<Set<string>>(new Set())
 
 // Changed files
 const changedFiles = ref<ChangedFileInfo[]>([])
@@ -167,10 +171,6 @@ const createTask = async () => {
 }
 
 const acceptSuccess = ref(false)
-const buttonStates = ref<ButtonStates>({
-  can_accept: false,
-  can_merge: false
-})
 
 // Sync state
 const syncing = ref(false)          // Sync in progress
@@ -550,8 +550,7 @@ watch(taskId, async (_newId, oldId) => {
   await Promise.all([
     loadChangedFiles(),
     loadCommits(),
-    loadButtonStates(),
-    refreshStatus(),
+    refreshCurrentTaskStatus(),
     loadFileTree()
   ])
 })
@@ -626,13 +625,30 @@ const loadFileTree = async () => {
   }
 }
 
-const handleSearchSelect = (filePath: string, lineNumber: number) => {
-  loadFile(filePath)
-  // Jump to line after editor loads
+const handleSearchSelect = async (filePath: string, lineNumber: number) => {
+  console.log('[handleSearchSelect] filePath:', filePath, 'lineNumber:', lineNumber)
+  if (currentFile.value !== filePath) {
+    pendingLineJump.value = lineNumber
+    await loadFile(filePath)
+    console.log('[handleSearchSelect] loadFile done, currentFile:', currentFile.value)
+  } else {
+    // Same file, just jump to line
+    nextTick(() => {
+      if (editorRef.value) {
+        editorRef.value.goToLine(lineNumber)
+        console.log('[handleSearchSelect] goToLine called (same file)')
+      }
+    })
+  }
+}
+
+const handleFindReferences = (selectedText: string) => {
+  refererQuery.value = selectedText
+  activeFilesTab.value = 'referer'
+  // Trigger search after tab switches to 'referer'
   nextTick(() => {
-    if (editorRef.value) {
-      editorRef.value.goToLine(lineNumber)
-    }
+    const searchBtn = document.querySelector('.referer-search .search-btn') as HTMLButtonElement
+    if (searchBtn) searchBtn.click()
   })
 }
 
@@ -960,17 +976,37 @@ function handleCursorWord(word: string, _position: { lineNumber: number; column:
   }
 }
 
+// Pending line jump after file loads
+const pendingLineJump = ref<number | null>(null)
+
+// Watch for file content changes to execute pending line jumps
+watch(fileContent, () => {
+  if (pendingLineJump.value !== null) {
+    const line = pendingLineJump.value
+    pendingLineJump.value = null
+    // Wait for Monaco to render the new content
+    setTimeout(() => {
+      if (editorRef.value) {
+        editorRef.value.goToLine(line)
+        console.log('[handleSearchSelect] goToLine called, line:', line)
+      }
+    }, 100)
+  }
+})
+
 async function handleSymbolNavigate(filePath: string, lineNumber: number) {
   // If the file is different from current, load it first
   if (currentFile.value !== filePath) {
+    pendingLineJump.value = lineNumber
     await loadFile(filePath, 'editor')
+  } else {
+    // Same file, just jump to line
+    nextTick(() => {
+      if (editorRef.value) {
+        editorRef.value.goToLine(lineNumber)
+      }
+    })
   }
-  // Then navigate to the line after the file loads
-  nextTick(() => {
-    if (editorRef.value) {
-      editorRef.value.goToLine(lineNumber)
-    }
-  })
 }
 
 function handleOutlineToggle() {
@@ -1062,7 +1098,6 @@ const confirmMerge = async () => {
     await loadTask()
     await loadChangedFiles()
     await loadCommits(true)  // Refresh commits after merge
-    await loadButtonStates()  // Refresh button states after merge
 
   } catch (err: any) {
     syncing.value = false
@@ -1132,8 +1167,6 @@ const acceptChanges = async () => {
     await loadChangedFiles()
     // Reload commits to show the new commit
     await loadCommits(true)
-    // Refresh button states
-    await loadButtonStates()
     // Auto-hide success message after 2 seconds
     setTimeout(() => {
       acceptSuccess.value = false
@@ -1145,25 +1178,7 @@ const acceptChanges = async () => {
   accepting.value = false
 }
 
-const loadButtonStates = async () => {
-  // Guard against navigation/unmounting - don't make API calls if taskId is undefined
-  if (!taskId.value) return
-
-  try {
-    buttonStates.value = await tasksApi.getButtonStates(taskId.value)
-    console.log('[Button States Debug]', {
-      can_merge: buttonStates.value.can_merge,
-      can_accept: buttonStates.value.can_accept,
-      task_status: task.value?.task_status,
-      last_merge_commit_hash: task.value?.last_merge_commit_hash,
-      task_id: taskId.value
-    })
-  } catch (err: any) {
-    console.error('Failed to load button states:', err)
-  }
-}
-
-const refreshStatus = async () => {
+const refreshCurrentTaskStatus = async () => {
   // Guard against navigation/unmounting - don't make API calls if taskId is undefined
   if (!taskId.value) return
 
@@ -1176,7 +1191,23 @@ const refreshStatus = async () => {
       task.value.last_code_status_check = status.last_code_status_check
     }
   } catch (err: any) {
-    console.error('Failed to refresh status:', err)
+    console.error('Failed to refresh current task status:', err)
+  }
+}
+
+const refreshAllTasksStatus = async () => {
+  if (!tasks.value.length) return
+
+  try {
+    const results = await Promise.all(
+      tasks.value.map(t => tasksApi.getStatus(t.id))
+    )
+    results.forEach((status, index) => {
+      tasks.value[index].task_status = status.task_status
+      tasks.value[index].code_status = status.code_status
+    })
+  } catch (err: any) {
+    console.error('Failed to refresh all tasks status:', err)
   }
 }
 
@@ -1194,8 +1225,7 @@ const switchTask = async (newTaskId: string) => {
   await Promise.all([
     loadChangedFiles(),
     loadCommits(true),
-    loadButtonStates(),
-    refreshStatus(),
+    refreshCurrentTaskStatus(),
     loadFileTree()
   ])
 
@@ -1208,6 +1238,11 @@ const switchTask = async (newTaskId: string) => {
   // 5. Reset pagination
   currentPage.value = 1
   changedFilesPage.value = 1
+
+  // 6. Hide sidebar on mobile
+  if (isMobile.value) {
+    showFileList.value = false
+  }
 }
 
 const toggleDir = async (path: string) => {
@@ -1712,6 +1747,11 @@ const loadCommitDiff = async (commitHash: string) => {
     console.log('[DEBUG] taskId:', taskId.value)
     // The CommitDiffView component handles lazy loading internally
     editorMode.value = 'commit-diff'
+
+    // Close sidebar on mobile
+    if (isMobile.value) {
+      showFileList.value = false
+    }
   } catch (err: any) {
     console.error('[DEBUG] Failed to load commit diff:', err)
     console.error('[DEBUG] Error details:', err.message, err.stack)
@@ -1749,21 +1789,31 @@ const getNewCommitHashes = (newCommits: CommitInfo[]): Set<string> => {
 
 // Auto-refresh
 let refreshTimer: number | null = null
+let refreshAllTasksTimer: number | null = null
 
 const startRefresh = () => {
   refreshTimer = window.setInterval(() => {
     if (!isLanMode()) return  // 非局域网跳过本次刷新
     loadChangedFiles()
-    loadButtonStates()  // Real-time check for button states
-    refreshStatus()      // Update status display
+    refreshCurrentTaskStatus()  // Update current task status display
     loadCommits(true)   // Silent refresh, no loading spinner
   }, 15000)  // Changed from 5000 to 15000 (15 seconds)
+
+  // Refresh all tasks status every 30 seconds
+  refreshAllTasksTimer = window.setInterval(() => {
+    if (!isLanMode()) return
+    refreshAllTasksStatus()
+  }, 30000)
 }
 
 const stopRefresh = () => {
   if (refreshTimer) {
     clearInterval(refreshTimer)
     refreshTimer = null
+  }
+  if (refreshAllTasksTimer) {
+    clearInterval(refreshAllTasksTimer)
+    refreshAllTasksTimer = null
   }
 }
 
@@ -1802,8 +1852,8 @@ onMounted(async () => {
     loadFileTree()
     loadChangedFiles().then(() => { initialLoading.value = false })
     loadCommits()
-    loadButtonStates()
-    refreshStatus()
+    refreshCurrentTaskStatus()
+    refreshAllTasksStatus()
     startRefresh()
   }
 
@@ -1909,31 +1959,14 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <!-- Direct on branch notice - floating banner -->
-    <div v-if="task?.direct_on_branch && !hideDirectBranchBanner"
-         class="banner-direct fixed top-16 right-4 z-50 px-4 py-2 shadow-lg rounded-md max-w-sm bg-slate-100/90 dark:bg-slate-800/90 border border-slate-300/90 dark:border-slate-600/90">
-      <div class="flex items-start gap-2 text-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 mt-0.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-        <span class="flex-1 text-slate-700 dark:text-slate-200">This task works directly on main branch.</span>
-        <button @click="hideDirectBranchBanner = true" class="shrink-0 hover:opacity-70 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300" title="Dismiss">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-
     <!-- Main content -->
     <splitpanes v-if="layoutLoaded" ref="mainSplitpanesRef" class="default-theme flex-1 min-h-0 flex" @resize="handleMainResize">
       <!-- Sidebar pane -->
-      <pane v-if="!isMobile || showFileList" :size="isMobile && showFileList ? 100 : layout.sidebar" :min-size="isMobile && showFileList ? 100 : 10"
-            @click="isMobile && loadFile(null, 'editor')">
+      <pane v-if="!isMobile || showFileList" :size="isMobile && showFileList ? 100 : layout.sidebar" :min-size="isMobile && showFileList ? 100 : 10">
         <splitpanes ref="sidebarSplitpanesRef" horizontal class="default-theme h-full" @resize="handleSidebarResize">
           <!-- File tree -->
           <pane :size="layout.filesPane" :min-size="5" class="flex flex-col min-h-0 bg-main border-r border-main">
-            <div class="flex-[1] p-4 border-b border-main overflow-y-auto min-h-0">
+            <div class="flex-[1] p-4 border-b border-main min-h-0 flex flex-col">
               <div class="flex items-center justify-between mb-2">
                 <div class="flex gap-1">
                   <button
@@ -1948,7 +1981,7 @@ onUnmounted(() => {
                     :class="activeFilesTab === 'referer' ? 'tab-active' : 'border-transparent text-sub hover:text-main'"
                     class="text-sm font-medium px-2 py-1 border-b-2"
                   >
-                    Referer
+                    Refer
                   </button>
                 </div>
                 <button v-if="activeFilesTab === 'files'" @click="loadFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
@@ -1957,11 +1990,11 @@ onUnmounted(() => {
                   </svg>
                 </button>
               </div>
-              <div v-if="loadingFiles" class="flex items-center justify-center py-4">
-                <div class="spinner"></div>
-              </div>
-              <div v-if="activeFilesTab === 'files'">
-                <div class="file-tree text-sm" @click="closeContextMenuOnClick">
+              <div class="relative flex-1 min-h-0">
+                <div v-if="loadingFiles && activeFilesTab === 'files'" class="flex items-center justify-center py-4 absolute inset-0 z-10 bg-main">
+                  <div class="spinner"></div>
+                </div>
+                <div class="file-tree text-sm absolute inset-0 overflow-y-auto" v-show="activeFilesTab === 'files'" @click="closeContextMenuOnClick">
                   <FileTreeItem
                     v-for="path in rootPaths"
                     :key="path"
@@ -1973,30 +2006,75 @@ onUnmounted(() => {
                   />
                   <div v-if="rootPaths.length === 0" class="text-xs text-sub py-2">No files found (rootPaths empty)</div>
                 </div>
+                <div class="absolute inset-0 overflow-y-auto" v-show="activeFilesTab === 'referer'">
+                  <RefererSearch
+                    :task-id="taskId"
+                    :worktree-path="task?.worktree_path || ''"
+                    :current-file="currentFile || ''"
+                    :query="refererQuery"
+                    :results="refererResults"
+                    :total="refererTotal"
+                    :total-matches="refererTotalMatches"
+                    :page="refererPage"
+                    :expanded-files="refererExpandedFiles"
+                    @update:query="refererQuery = $event"
+                    @update:results="refererResults = $event"
+                    @update:total="refererTotal = $event"
+                    @update:total-matches="refererTotalMatches = $event"
+                    @update:page="refererPage = $event"
+                    @update:expanded-files="refererExpandedFiles = $event"
+                    @select-file="handleSearchSelect"
+                  />
+                </div>
               </div>
-              <RefererSearch
-                v-else
-                :task-id="taskId"
-                @select-file="handleSearchSelect"
-              />
             </div>
           </pane>
 
           <!-- Changes / Commits tabbed pane -->
           <pane :size="layout.tabbedPane" :min-size="15" class="flex flex-col min-h-0 bg-main border-r border-main">
-            <!-- Tab bar -->
-            <div class="flex border-b border-main shrink-0">
+            <!-- Tab bar: tabs left, action buttons right -->
+            <div class="flex items-center justify-between mb-2 shrink-0">
+              <div class="flex gap-1">
+                <button
+                  @click="activeTab = 'changes'"
+                  :class="activeTab === 'changes' ? 'tab-active' : 'border-transparent text-sub hover:text-main'"
+                  class="text-sm font-medium px-2 py-1 border-b-2"
+                >
+                  Changes ({{ changedFiles.length }})
+                </button>
+                <button
+                  @click="activeTab = 'commits'"
+                  :class="activeTab === 'commits' ? 'tab-active' : 'border-transparent text-sub hover:text-main'"
+                  class="text-sm font-medium px-2 py-1 border-b-2"
+                >
+                  Commits
+                </button>
+              </div>
+              <!-- Accept button: visible in changes tab -->
               <button
-                @click="activeTab = 'changes'"
-                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors border-b-2', activeTab === 'changes' ? 'tab-active' : 'border-transparent text-sub hover:text-main']"
+                v-if="activeTab === 'changes'"
+                @click="openCommitMessageModal"
+                :disabled="accepting"
+                :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
+                title="Accept"
               >
-                Changes ({{ changedFiles.length }})
+                <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
               </button>
+              <!-- Merge button: visible in commits tab, not direct_on_branch -->
               <button
-                @click="activeTab = 'commits'"
-                :class="['flex-1 px-3 py-2 text-sm font-medium transition-colors border-b-2', activeTab === 'commits' ? 'tab-active' : 'border-transparent text-sub hover:text-main']"
+                v-if="activeTab === 'commits' && !task?.direct_on_branch"
+                @click="mergeTask"
+                :disabled="syncing"
+                :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
+                title="Merge"
               >
-                Commits
+                <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
               </button>
             </div>
 
@@ -2004,20 +2082,6 @@ onUnmounted(() => {
             <div class="flex-1 overflow-y-auto min-h-0">
               <!-- Changes tab -->
               <div v-if="activeTab === 'changes'" class="changed-files-list p-4 min-h-full">
-                <div class="flex items-center justify-between mb-2">
-                  <h3 class="text-sm font-semibold text-main">Changes</h3>
-                  <button
-                    @click="openCommitMessageModal"
-                    :disabled="accepting"
-                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
-                    title="Accept"
-                  >
-                    <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </button>
-                </div>
                 <div v-if="initialLoading" class="flex items-center justify-center py-4">
                   <div class="spinner"></div>
                 </div>
@@ -2062,23 +2126,6 @@ onUnmounted(() => {
 
               <!-- Commits tab -->
               <div v-else class="flex-[1] p-4 min-h-full">
-                <div class="flex items-center justify-between mb-2">
-                  <h3 class="text-sm font-semibold text-main">Commits</h3>
-                  <div class="flex gap-1">
-                    <button
-                      v-if="!task?.direct_on_branch"
-                      @click="mergeTask"
-                      :disabled="syncing"
-                      :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
-                      title="Merge"
-                    >
-                      <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
                 <CommitsList
                   :commits="commits"
                   :loading="loadingCommits"
@@ -2124,7 +2171,7 @@ onUnmounted(() => {
                     task.id === taskId ? 'task-item-selected' : 'hover:bg-sub text-sub'
                   ]"
                 >
-                  <span class="truncate flex-1">{{ task.name }}</span>
+                  <span class="truncate flex-1">{{ task.name }}<span v-if="task.code_status === 'pending_review'" class="text-yellow-500 text-xs ml-1">(review)</span><span v-else-if="task.code_status === 'ready_to_merge'" class="text-green-500 text-xs ml-1">(merge)</span></span>
                   <span v-if="task.direct_on_branch" class="badge-direct px-1 py-0.5 text-xs rounded shrink-0">Direct</span>
                   <button
                     v-if="!task.direct_on_branch"
@@ -2379,6 +2426,7 @@ onUnmounted(() => {
                     @preview-markdown="openMarkdownPreview"
                     @content-change="handleContentChange"
                     @cursor-word="handleCursorWord"
+                    @find-references="handleFindReferences"
                   />
                   <SymbolOutline
                     ref="outlineRef"

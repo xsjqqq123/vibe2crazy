@@ -77,8 +77,8 @@ class TaskMonitorService:
 
     def update_task_status(self, task: Task, db: Session):
         """Update task running/idle status by monitoring tmux output"""
-        # Capture last 100 lines from tmux
-        success, content = TmuxService.capture_history(task.tmux_session)
+        # Capture last lines from tmux (incremental: reads ~1500 stripped bytes)
+        success, content = TmuxService.capture_history(task.tmux_session, incremental=True)
 
         if not success:
             # Session doesn't exist or error - mark as idle

@@ -19,6 +19,7 @@ interface Emits {
   (e: 'previewMarkdown'): void
   (e: 'content-change'): void
   (e: 'cursor-word', word: string, position: { lineNumber: number; column: number }): void
+  (e: 'find-references', selectedText: string): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -122,6 +123,33 @@ onMounted(async () => {
       }
     })
   }
+
+  // Add find references context menu action
+  editor.addAction({
+    id: 'find-references',
+    label: 'Find References',
+    contextMenuGroupId: 'navigation',
+    run: () => {
+      const selection = editor.getSelection()
+      const model = editor.getModel()
+      let searchText = ''
+
+      // First try to get selected text
+      if (selection && !selection.isEmpty()) {
+        searchText = model?.getValueInRange(selection) || ''
+      } else if (model && selection) {
+        // No selection, get word at cursor position
+        const word = model.getWordAtPosition(selection.getStartPosition())
+        if (word && word.word) {
+          searchText = word.word
+        }
+      }
+
+      if (searchText) {
+        emit('find-references', searchText)
+      }
+    }
+  })
 
   // Listen for content changes
   editor.onDidChangeModelContent(() => {

@@ -172,8 +172,8 @@ start_backend() {
         pip install -r requirements.txt -q
     fi
 
-    # Start in background
-    nohup python -m uvicorn app:app --host 0.0.0.0 --port $BACKEND_PORT > "$SCRIPT_DIR/logs/backend.log" 2>&1 &
+    # Start in background (dual-stack HTTP+HTTPS on port 8863)
+    nohup python -c "from app.main import run_dual_stack; run_dual_stack(host='0.0.0.0', port=$BACKEND_PORT)" > "$SCRIPT_DIR/logs/backend.log" 2>&1 &
     echo $! > "$SCRIPT_DIR/logs/backend.pid"
 
     # Wait for startup

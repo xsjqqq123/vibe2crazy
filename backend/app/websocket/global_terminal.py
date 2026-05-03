@@ -23,14 +23,14 @@ GLOBAL_SESSION_NAME = "v2d-global"
 class GlobalWebSocketTerminal:
     """WebSocket terminal handler for the global tmux session"""
 
-    def __init__(self, websocket: WebSocket, session_name: str = GLOBAL_SESSION_NAME):
+    def __init__(self, websocket: WebSocket, session_name: str = GLOBAL_SESSION_NAME, initial_cols: int = SIZE_COLS, initial_rows: int = SIZE_ROWS):
         self.websocket = websocket
         self.session_name = session_name
         self.fd: Optional[int] = None
         self.pid: Optional[int] = None
         self.running = False
-        self.cols = SIZE_COLS
-        self.rows = SIZE_ROWS
+        self.cols = initial_cols
+        self.rows = initial_rows
 
     async def start(self):
         """Start terminal session"""
@@ -47,8 +47,8 @@ class GlobalWebSocketTerminal:
 
             # Create pseudoterminal
             self.fd, slave_fd = pty.openpty()
-            self._set_pty_size(self.fd, SIZE_ROWS, SIZE_COLS)
-            logger.info(f"Global terminal PTY created: {SIZE_COLS}x{SIZE_ROWS}")
+            self._set_pty_size(self.fd, self.rows, self.cols)
+            logger.info(f"Global terminal PTY created: {self.cols}x{self.rows}")
 
             # Attach to tmux session
             # Use clean environment to avoid PyInstaller library pollution
@@ -155,7 +155,7 @@ class GlobalWebSocketTerminal:
         try:
             if action == 'enter':
                 subprocess.run(
-                    ['tmux', 'copy-mode', '-e', '-t', self.session_name],
+                    ['tmux', 'copy-mode', '-t', self.session_name],
                     capture_output=True, text=True, timeout=2, env=_clean_env_for_subprocess()
                 )
             elif action == 'exit':

@@ -74,6 +74,43 @@ class TmuxService:
     """Service for tmux session management"""
 
     @staticmethod
+    def _init_global_bindings():
+        """Initialize global tmux key bindings for PageUp/PageDown scroll.
+
+        Uses `copy-mode -e` (auto-exit at bottom) instead of compound if-F
+        commands, because #{scroll_position_bottom} is NOT a valid tmux format
+        variable (use #{==:#{scroll_position},0} instead), and nested compound
+        { } commands cause tmux parsing issues when called via subprocess.
+
+        Strategy:
+          - Root table: PageUp enters copy-mode (-e = auto-exit, -u = scroll up)
+          - Both copy-mode tables: PageUp/PageDown navigation (in case user's
+            .tmux.conf overrides tmux defaults)
+          - copy-mode -e exits copy-mode automatically when PageDown reaches bottom
+        """
+        env = _clean_env_for_subprocess()
+
+        bindings = [
+            # Root: PageUp enters copy-mode with auto-exit + scroll up one page
+            ["tmux", "bind-key", "-n", "PageUp", "copy-mode", "-e", "-u"],
+            # copy-mode (emacs): navigate
+            ["tmux", "bind-key", "-T", "copy-mode", "PageUp", "send-keys", "-X", "page-up"],
+            ["tmux", "bind-key", "-T", "copy-mode", "PageDown", "send-keys", "-X", "page-down"],
+            # copy-mode-vi (vi): navigate
+            ["tmux", "bind-key", "-T", "copy-mode-vi", "PageUp", "send-keys", "-X", "page-up"],
+            ["tmux", "bind-key", "-T", "copy-mode-vi", "PageDown", "send-keys", "-X", "page-down"],
+        ]
+        for cmd in bindings:
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
+                if r.returncode != 0:
+                    logger.warning(f"tmux bind-key failed ({' '.join(cmd)}): {r.stderr}")
+            except Exception as e:
+                logger.warning(f"tmux bind-key error ({' '.join(cmd)}): {e}")
+
+        logger.info("Global tmux PageUp/PageDown bindings set (auto-exit via -e flag)")
+
+    @staticmethod
     def session_exists(session_name: str) -> bool:
         """Check if a tmux session exists"""
         try:
@@ -102,6 +139,7 @@ class TmuxService:
         # Check if session already exists
         if TmuxService.session_exists(session_name):
             logger.info(f"Tmux session '{session_name}' already exists")
+            TmuxService._init_global_bindings()
             return True, "Session already exists"
 
         try:
@@ -113,13 +151,7 @@ class TmuxService:
             import shlex
             quoted_session = shlex.quote(session_name)
             quoted_dir = shlex.quote(working_dir)
-            # For send-keys cd command, ~ needs shell expansion so don't quote it
-            # Use double quotes to handle spaces while allowing ~ expansion
-            if working_dir.startswith('~'):
-                cd_dir = f'"{working_dir}"'  # Double quotes allow ~ expansion
-            else:
-                cd_dir = quoted_dir
-            cmd = f'tmux new-session -d -s {quoted_session} -c {quoted_dir} \\; set-option -g history-limit 50000 \\; set-option -w history-limit 50000 \\; set -g status off \\; send-keys "cd {cd_dir}" C-m'
+            cmd = f'tmux new-session -d -s {quoted_session} -c {quoted_dir} \\; set-option -g history-limit 50000 \\; set-option -w history-limit 50000 \\; set -g status off'
             result = subprocess.run(
                 cmd,
                 shell=True,
@@ -131,6 +163,9 @@ class TmuxService:
             if result.returncode != 0:
                 logger.error(f"Failed to create tmux session: {result.stderr}")
                 return False, result.stderr or "Failed to create session"
+
+            # Initialize global PageUp/PageDown bindings
+            TmuxService._init_global_bindings()
 
             logger.info(f"Tmux session created: {session_name} with history-limit 50000, cd to {working_dir}")
             return True, "Session created successfully"
@@ -194,31 +229,64 @@ class TmuxService:
         return [s for s in all_sessions if s.startswith(settings.tmux_session_prefix)]
 
     @staticmethod
-    def capture_history(session_name: str) -> tuple[bool, str]:
+    def capture_history(session_name: str, incremental: bool = False, max_stripped_len: int = 1500) -> tuple[bool, str]:
         """
-        Capture terminal history from tmux session
+        Capture terminal history from tmux session.
+
+        Args:
+            session_name: tmux session name
+            incremental: if True, read incrementally from end until max_stripped_len bytes (no newlines)
+            max_stripped_len: target stripped length for incremental mode
+
         Returns: (success, history_content or error_message)
         """
-        logger.debug(f"Capturing history from tmux session: {session_name}")
+        logger.debug(f"Capturing history from tmux session: {session_name}, incremental={incremental}")
 
         # Check if session exists
         if not TmuxService.session_exists(session_name):
             logger.warning(f"Cannot capture history: session '{session_name}' does not exist")
             return False, "Session does not exist"
 
-        import tempfile
-        import os
-
         try:
-            # Create a temporary file to store the captured output
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as tmp_file:
-                tmp_path = tmp_file.name
+            if incremental:
+                return TmuxService._capture_history_incremental(session_name, max_stripped_len)
+            else:
+                return TmuxService._capture_history_full(session_name)
+        except Exception as e:
+            logger.exception(f"Exception capturing tmux history: {e}")
+            return False, str(e)
 
-            # Use tmux capture-pane to capture the entire scrollback history
-            # -S - captures all history (starting from the beginning)
-            # -p prints to stdout
+    @staticmethod
+    def _capture_history_full(session_name: str) -> tuple[bool, str]:
+        """Capture full terminal history (original behavior)"""
+        result = subprocess.run(
+            ["tmux", "capture-pane", "-t", session_name, "-S", "-", "-p"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_clean_env_for_subprocess()
+        )
+
+        if result.returncode != 0:
+            logger.error(f"Failed to capture tmux history: {result.stderr}")
+            return False, result.stderr or "Failed to capture history"
+
+        logger.debug(f"Captured {len(result.stdout)} characters from session '{session_name}'")
+        return True, result.stdout
+
+    @staticmethod
+    def _capture_history_incremental(session_name: str, max_stripped_len: int) -> tuple[bool, str]:
+        """Capture history incrementally - read 10 lines at a time from end until target bytes reached."""
+        lines: list[str] = []
+        stripped_len = 0
+        batch_size = 10
+        start_line = -batch_size  # Start from last 10 lines
+
+        while stripped_len < max_stripped_len:
+            # Capture current batch of 10 lines
+            # -S -N means from line -N (going backwards) to end
             result = subprocess.run(
-                ["tmux", "capture-pane", "-t", session_name, "-S", "-", "-p"],
+                ["tmux", "capture-pane", "-t", session_name, "-S", str(start_line), "-E", "-", "-p"],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -226,32 +294,29 @@ class TmuxService:
             )
 
             if result.returncode != 0:
-                logger.error(f"Failed to capture tmux history: {result.stderr}")
-                return False, result.stderr or "Failed to capture history"
+                # End of history reached
+                break
 
-            # Write captured content to temp file
-            with open(tmp_path, 'w') as f:
-                f.write(result.stdout)
+            batch_lines = result.stdout.rstrip('\n').split('\n')
+            # Deduplicate: skip the first line if we already have content (it overlaps with previous batch end)
+            if lines:
+                batch_lines = batch_lines[1:]
 
-            # Read the content back
-            with open(tmp_path, 'r') as f:
-                history_content = f.read()
+            if not batch_lines:
+                break
 
-            # Clean up temp file
-            os.unlink(tmp_path)
+            # Prepend to maintain chronological order (oldest first)
+            lines = batch_lines + lines
+            stripped_len = ''.join(lines).replace('\n', '').__len__()
 
-            logger.debug(f"Captured {len(history_content)} characters from session '{session_name}'")
-            return True, history_content
+            # Move start_line further back for next batch
+            start_line -= batch_size
 
-        except Exception as e:
-            logger.exception(f"Exception capturing tmux history: {e}")
-            # Clean up temp file if it exists
-            if 'tmp_path' in locals() and os.path.exists(tmp_path):
-                try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
-            return False, str(e)
+            logger.debug(f"Incremental capture: got {len(lines)} lines, {stripped_len} stripped bytes")
+
+        history_content = '\n'.join(lines)
+        logger.debug(f"Incremental capture complete: {len(history_content)} chars, {stripped_len} stripped bytes")
+        return True, history_content
 
     @staticmethod
     def send_keys(session_name: str, keys: str) -> tuple[bool, str]:

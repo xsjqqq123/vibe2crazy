@@ -18,6 +18,7 @@ class TunnelService:
         self.db = db
         self.local_port = local_port
         self.config = config
+        self._token: Optional[str] = None  # Store token directly to avoid SQLAlchemy session issues
         self._task: Optional[asyncio.Task] = None
         self._client_task: Optional[asyncio.Task] = None
         self._client = None
@@ -33,10 +34,11 @@ class TunnelService:
         # Refresh config from database to get latest token
         try:
             self.db.refresh(self.config)
+            self._token = self.config.token  # Cache token locally
         except Exception as e:
             logger.error(f"Failed to refresh config: {e}")
 
-        if not self.config.token:
+        if not self._token:
             logger.warning("No tunnel token configured")
             return False
 
@@ -100,6 +102,9 @@ class TunnelService:
                 await self._connect()
                 delay = 5.0  # Reset on success
                 await self._wait_disconnect()
+                # Add delay after normal disconnect (not exception)
+                logger.info(f"Connection lost, retrying in {delay:.1f} seconds...")
+                await asyncio.sleep(delay)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -114,6 +119,20 @@ class TunnelService:
         self._update_status("connecting")
 
         try:
+            # Check token before connecting
+            if not self._token:
+                logger.error("No token available, stopping tunnel service")
+                self._running = False
+                self._update_status("disabled", "No token configured")
+                return
+
+            # Add client module path (from vibe2crazy_server)
+            import sys
+            from pathlib import Path
+            client_path = Path(__file__).parent.parent.parent.parent.parent / "vibe2crazy_server" / "client"
+            if client_path.exists() and str(client_path.parent) not in sys.path:
+                sys.path.insert(0, str(client_path.parent))
+
             # Import tunnel client package
             from client import TunnelClient
             from client.config import TunnelClientConfig
@@ -126,17 +145,19 @@ class TunnelService:
 
             # Node discovery
             logger.info(f"Discovering tunnel node via {server_url}")
-            discovery = NodeDiscovery(server_url, self.config.token)
+            discovery = NodeDiscovery(server_url, self._token)
             node_info = await discovery.get_node_info()
 
             # Create client config
+            use_tls = self.config.use_tls if self.config.use_tls is not None else True
+            verify_tls = self.config.verify_tls if self.config.verify_tls is not None else False
             client_config = TunnelClientConfig(
                 backend_api_url=server_url,
-                token=self.config.token,
+                token=self._token,
                 local_host="127.0.0.1",
                 local_port=self.local_port,
-                use_tls=self.config.use_tls,
-                verify_tls=self.config.verify_tls,
+                use_tls=use_tls,
+                verify_tls=verify_tls,
                 reconnect_max_retries=0,  # Disable client retry, managed by TunnelService
             )
 
@@ -144,7 +165,13 @@ class TunnelService:
             self._client = TunnelClient(client_config)
 
             # Override discovered node info
-            self._client.config.server_host = node_info["node_domain"]
+            # Extract host from URL (node_domain may be full URL like https://ip:port)
+            from urllib.parse import urlparse
+            node_domain = node_info["node_domain"]
+            parsed = urlparse(node_domain)
+            server_host = parsed.hostname or node_domain  # Use hostname if URL, else raw value
+
+            self._client.config.server_host = server_host
             self._client.config.server_port = node_info["node_tunnel_port"]
             self._client._assigned_port = node_info["assigned_port"]
 
@@ -160,7 +187,10 @@ class TunnelService:
             # Check if client connected successfully
             if self._client._connection and self._client._connection.is_active:
                 self._connected = True
-                remote_url = f"http://{node_info['node_domain']}:{node_info['assigned_port']}"
+                # Extract scheme from node_domain URL, default to https
+                node_domain = node_info["node_domain"]
+                parsed_scheme = parsed.scheme if parsed.scheme else "https"
+                remote_url = f"{parsed_scheme}://{server_host}:{node_info['assigned_port']}"
                 self._update_status("connected", remote_url=remote_url)
                 logger.info(f"Tunnel connected: {remote_url}")
             else:

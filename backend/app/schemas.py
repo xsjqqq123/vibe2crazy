@@ -132,14 +132,6 @@ class TaskStatusResponse(BaseModel):
     last_task_status_check: Optional[datetime] = None
     last_code_status_check: Optional[datetime] = None
 
-
-class ButtonStatesResponse(BaseModel):
-    """Response for button states"""
-    can_accept: bool
-    can_merge: bool
-    reason: Optional[str] = None
-
-
 class MergeRequest(BaseModel):
     message: str = "Merge task"
 
@@ -392,6 +384,12 @@ class LocalInfoResponse(BaseModel):
 class TokenHashResponse(BaseModel):
     """Response for /api/tunnel/token_hash endpoint."""
     token_hash: str
+
+
+class CertInfoResponse(BaseModel):
+    """Response for /api/tunnel/cert_info endpoint."""
+    has_tls: bool
+    fingerprint: Optional[str] = None
 
 
 # Password management schemas

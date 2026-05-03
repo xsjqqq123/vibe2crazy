@@ -60,3 +60,6 @@ data/
 *.log
 .worktrees/
 .tags/
+
+# Playwright MCP
+.playwright-mcp/

@@ -14,8 +14,11 @@ from app.schemas import (
     TunnelConfigResponse,
     LocalInfoResponse,
     TokenHashResponse,
+    CertInfoResponse,
 )
 from app.services.network_service import network_service
+import hashlib
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tunnel", tags=["tunnel"])
@@ -39,7 +42,7 @@ def get_tunnel_config(db: Session = Depends(get_db)) -> TunnelConfig:
     """Get or create tunnel config (single row with id=1)."""
     config = db.query(TunnelConfig).filter(TunnelConfig.id == 1).first()
     if not config:
-        config = TunnelConfig(id=1, status="disabled")
+        config = TunnelConfig(id=1, status="disabled", use_tls=True)
         db.add(config)
         db.commit()
         db.refresh(config)
@@ -180,3 +183,28 @@ async def get_token_hash():
     return TokenHashResponse(
         token_hash=network_service.generate_token_hash()
     )
+
+
+@router.get("/cert_info", response_model=CertInfoResponse)
+async def get_cert_info():
+    """Get TLS certificate information for the backend.
+
+    Returns the SHA-256 fingerprint of the self-signed certificate if available.
+    This allows the frontend to know whether it's connecting to a TLS-enabled backend
+    and to accept self-signed certificates when probing LAN addresses.
+    """
+    # Get cert path from settings database location
+    db_path = settings.database_url.replace("sqlite:///", "")
+    data_dir = Path(db_path).parent
+    cert_path = data_dir / "cert.pem"
+
+    if cert_path.exists():
+        try:
+            with open(cert_path, "rb") as f:
+                cert_data = f.read()
+            fingerprint = hashlib.sha256(cert_data).hexdigest()
+            return CertInfoResponse(has_tls=True, fingerprint=fingerprint)
+        except Exception as e:
+            logger.warning(f"Failed to read certificate: {e}")
+
+    return CertInfoResponse(has_tls=False, fingerprint=None)

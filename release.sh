@@ -244,13 +244,13 @@ from pathlib import Path
 # Add obfuscated app to path
 sys.path.insert(0, str(Path(__file__).parent / "obfuscated"))
 
-# Import and run the app
+# Import the app module
 from app.main import app
 
 # For PyInstaller, we need a console script entry point
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8863)
+    from app.main import run_dual_stack
+    run_dual_stack(host="0.0.0.0", port=8863)
 ENTRY_EOF
 
     # Run PyInstaller

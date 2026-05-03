@@ -12,11 +12,6 @@ export interface TaskStatusResponse {
   last_code_status_check?: string
 }
 
-export interface ButtonStatesResponse {
-  can_accept: boolean
-  can_merge: boolean
-  reason?: string
-}
 
 export interface CommandExecution {
   command: string
@@ -125,9 +120,6 @@ const tasksApi = {
 
   getStatus: (taskId: string): Promise<TaskStatusResponse> =>
     request<TaskStatusResponse>(`/tasks/${taskId}/status`),
-
-  getButtonStates: (taskId: string): Promise<ButtonStatesResponse> =>
-    request<ButtonStatesResponse>(`/tasks/${taskId}/button-states`)
 }
 
 export default tasksApi

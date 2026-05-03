@@ -158,7 +158,7 @@ const displayTitle = computed(() => {
 const badgeNumber = computed(() => props.index + 1)
 
 // Get WebSocket URL based on mode (using wsNetworkManager)
-const getWsUrl = () => {
+const getWsUrl = (size?: { cols: number; rows: number }) => {
   // Get base URL from network manager
   let wsBase = wsNetworkManager.getWsBase()
 
@@ -172,9 +172,13 @@ const getWsUrl = () => {
 
   // Add path based on mode
   if (props.mode === 'tasks' && props.taskId) {
-    return `${wsBase}/terminal?token=${token.value}&task_id=${props.taskId}`
+    let url = `${wsBase}/terminal?token=${token.value}&task_id=${props.taskId}`
+    if (size) url += `&cols=${size.cols}&rows=${size.rows}`
+    return url
   } else if (props.mode === 'sessions') {
-    return `${wsBase}/matrix-terminal?token=${token.value}&index=${props.index}&session=${props.sessionName}`
+    let url = `${wsBase}/matrix-terminal?token=${token.value}&index=${props.index}&session=${props.sessionName}`
+    if (size) url += `&cols=${size.cols}&rows=${size.rows}`
+    return url
   }
 
   return ''
@@ -219,7 +223,15 @@ const connect = () => {
 
   if (!token.value) return
 
-  const wsUrl = getWsUrl()
+  // Fit terminal to container before connecting to get accurate size
+  if (fitAddon.value && xterm.value) {
+    fitAddon.value.fit()
+  }
+
+  // Get initial size
+  const initialSize = xterm.value ? { cols: xterm.value.cols, rows: xterm.value.rows } : undefined
+
+  const wsUrl = getWsUrl(initialSize)
   if (!wsUrl) {
     xterm.value?.writeln('\x1b[31mError: Invalid terminal configuration\x1b[0m')
     return
@@ -235,14 +247,13 @@ const connect = () => {
     ws.value.onopen = () => {
       connected.value = true
       connecting.value = false
-      // Send pending resize if any
+      // Send pending resize if any (for cases where initial size wasn't available)
       if (pendingResize) {
         ws.value?.send(JSON.stringify({ type: 'resize', cols: pendingResize.cols, rows: pendingResize.rows }))
         pendingResize = null
       }
       if (xterm.value) {
         xterm.value.clear()
-        resize(xterm.value.cols, xterm.value.rows)
         xterm.value.writeln('\x1b[32m✓ Connected\x1b[0m')
       }
       // Reset API error watcher on reconnect
@@ -252,6 +263,11 @@ const connect = () => {
     ws.value.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
+        // Handle heartbeat ping from server
+        if (msg.type === 'ping') {
+          ws.value?.send(JSON.stringify({ type: 'pong' }))
+          return
+        }
         if (msg.type === 'output') {
           xterm.value?.write(msg.data)
           checkApiError()
@@ -328,6 +344,24 @@ const disconnect = () => {
   if (unsubscribeNetwork) {
     unsubscribeNetwork()
     unsubscribeNetwork = null
+  }
+}
+
+// Reconnect on visibility change (mobile tab switch)
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible') {
+    if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
+      console.log('[MatrixTerminal] Visibility changed to visible, reconnecting...')
+      connect()
+    }
+  }
+}
+
+// Reconnect on network online
+const handleOnline = () => {
+  if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
+    console.log('[MatrixTerminal] Network online, reconnecting...')
+    connect()
   }
 }
 
@@ -571,6 +605,8 @@ watch(() => mainStore.theme, (newTheme) => {
 onMounted(() => {
   initTerminal()
   window.addEventListener('resize', handleResize)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('online', handleOnline)
 
   // Use ResizeObserver to detect container size changes
   resizeObserver.value = new ResizeObserver(() => {
@@ -611,6 +647,8 @@ onUnmounted(() => {
 
   disconnect()
   window.removeEventListener('resize', handleResize)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('online', handleOnline)
   resizeObserver.value?.disconnect()
 
   if (xterm.value) {

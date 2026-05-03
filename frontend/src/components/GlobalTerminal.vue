@@ -210,10 +210,20 @@ const connect = () => {
 
   if (!token.value) return
 
+  // Fit terminal to container before connecting to get accurate size
+  if (fitAddon.value && xterm.value) {
+    fitAddon.value.fit()
+  }
+
   connecting.value = true
   isIntentionalClose = false
   connectionType.value = wsNetworkManager.getType()
-  const wsUrl = `${getWsUrl()}?token=${token.value}`
+
+  // Include initial terminal size in WebSocket URL
+  let wsUrl = `${getWsUrl()}?token=${token.value}`
+  if (xterm.value) {
+    wsUrl += `&cols=${xterm.value.cols}&rows=${xterm.value.rows}`
+  }
 
   try {
     ws.value = new WebSocket(wsUrl)
@@ -224,8 +234,6 @@ const connect = () => {
       if (xterm.value) {
         // Clear terminal and send reset command
         xterm.value.clear()
-        // Send initial resize after connection is established
-        resize(xterm.value.cols, xterm.value.rows)
       }
       // Reset API error watcher on reconnect
       if (apiErrorTimer) { clearTimeout(apiErrorTimer); apiErrorTimer = null }
@@ -234,6 +242,11 @@ const connect = () => {
     ws.value.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
+        // Handle heartbeat ping from server
+        if (msg.type === 'ping') {
+          ws.value?.send(JSON.stringify({ type: 'pong' }))
+          return
+        }
         if (msg.type === 'output') {
           xterm.value?.write(msg.data)
           checkApiError()
@@ -303,6 +316,24 @@ const disconnect = () => {
   if (unsubscribeNetwork) {
     unsubscribeNetwork()
     unsubscribeNetwork = null
+  }
+}
+
+// Reconnect on visibility change (mobile tab switch)
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible') {
+    if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
+      console.log('[GlobalTerminal] Visibility changed to visible, reconnecting...')
+      connect()
+    }
+  }
+}
+
+// Reconnect on network online
+const handleOnline = () => {
+  if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
+    console.log('[GlobalTerminal] Network online, reconnecting...')
+    connect()
   }
 }
 
@@ -679,6 +710,8 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
   window.addEventListener('resize', checkMobile)
   window.addEventListener('resize', ensureInViewport)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('online', handleOnline)
 
   // Use ResizeObserver to detect container size changes
   resizeObserver.value = new ResizeObserver(() => {
@@ -720,6 +753,8 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('resize', ensureInViewport)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('online', handleOnline)
   resizeObserver.value?.disconnect()
 
   if (xterm.value) {

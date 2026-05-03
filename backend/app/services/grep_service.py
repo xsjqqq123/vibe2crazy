@@ -4,12 +4,33 @@ import hashlib
 import json
 from pathlib import Path
 from typing import List, Optional
+import os
 
 logger = logging.getLogger(__name__)
 
 # 缓存目录
 CACHE_DIR = Path("/tmp")
 CACHE_TTL = 3600  # 1小时
+
+
+def path_similarity(path1: str, path2: str) -> int:
+    """
+    计算两个路径的相似度。
+    返回共同路径段的数量。
+    """
+    if not path1 or not path2:
+        return 0
+    parts1 = Path(path1).parts
+    parts2 = Path(path2).parts
+
+    # 计算共同前缀长度
+    common = 0
+    for i in range(min(len(parts1), len(parts2))):
+        if parts1[i] == parts2[i]:
+            common += 1
+        else:
+            break
+    return common
 
 class GrepService:
     """Service for ripgrep-based code search"""
@@ -47,7 +68,7 @@ class GrepService:
             logger.warning(f"Failed to write cache: {e}")
 
     @staticmethod
-    def search(worktree_path: str, query: str, page: int = 1, per_page: int = 20) -> dict:
+    def search(worktree_path: str, query: str, page: int = 1, per_page: int = 20, current_file: str = None) -> dict:
         """
         执行 ripgrep 搜索
         Returns: {
@@ -57,110 +78,109 @@ class GrepService:
             "cached": bool
         }
         """
-        cache_path = GrepService._get_cache_path(
-            worktree_path.split('/')[-1], query, page
+        # 将 current_file 转为绝对路径
+        if current_file and not current_file.startswith('/'):
+            current_file = os.path.join(worktree_path, current_file)
+
+        # 全量缓存键（不包含 page，存储所有结果）
+        full_cache_path = GrepService._get_cache_path(
+            worktree_path.split('/')[-1], query, 0
         )
 
-        # 尝试读取缓存
-        cached = GrepService._read_cache(cache_path)
-        if cached:
-            cached["cached"] = True
-            return cached
+        # 尝试读取全量缓存
+        cached = GrepService._read_cache(full_cache_path)
 
-        # 执行 ripgrep
-        try:
-            cmd = [
-                "rg", "--json", "-n",
-                "-g", "!node_modules",
-                "-g", "!node_modules/**",
-                "-g", "!.git",
-                "-g", "!.git/**",
-                query, worktree_path
-            ]
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+        if not cached:
+            # 执行 ripgrep
+            try:
+                cmd = [
+                    "rg", "--json", "-n",
+                    "-g", "!node_modules",
+                    "-g", "!node_modules/**",
+                    "-g", "!.git",
+                    "-g", "!.git/**",
+                    query, worktree_path
+                ]
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
 
-            if result.returncode not in (0, 1):  # 0=找到, 1=未找到
-                logger.error(f"ripgrep failed: {result.stderr}")
-                return {"results": [], "groups": [], "total": 0, "cached": False}
+                if result.returncode not in (0, 1):  # 0=找到, 1=未找到
+                    logger.error(f"ripgrep failed: {result.stderr}")
+                    return {"results": [], "groups": [], "total": 0, "cached": False}
 
-            # 解析 JSON 输出
-            matches: List[dict] = []
-            for line in result.stdout.strip().split('\n'):
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    if obj.get("type") == "match":
-                        data = obj["data"]
-                        matches.append({
-                            "file": data["path"]["text"],
-                            "line": data["line_number"],
-                            "content": data["lines"]["text"].rstrip('\n')
-                        })
-                except Exception:
-                    continue
+                # 解析 JSON 输出
+                matches: List[dict] = []
+                for line in result.stdout.strip().split('\n'):
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        if obj.get("type") == "match":
+                            data = obj["data"]
+                            matches.append({
+                                "file": data["path"]["text"],
+                                "line": data["line_number"],
+                                "content": data["lines"]["text"].rstrip('\n')
+                            })
+                    except Exception:
+                        continue
 
-            total = len(matches)
+                # 写入全量缓存
+                GrepService._write_cache(full_cache_path, {"matches": matches})
 
-            # 按文件分组
-            groups: List[dict] = []
-            file_matches: dict = {}
-            for m in matches:
-                f = m["file"]
-                if f not in file_matches:
-                    file_matches[f] = {"file": f, "matches": []}
-                file_matches[f]["matches"].append({"line": m["line"], "content": m["content"]})
-            groups = list(file_matches.values())
+            except subprocess.TimeoutExpired:
+                logger.error("ripgrep timed out")
+                return {"results": [], "groups": [], "total": 0, "cached": False, "error": "Search timed out"}
+            except Exception as e:
+                logger.error(f"ripgrep error: {e}")
+                return {"results": [], "groups": [], "total": 0, "cached": False, "error": str(e)}
+        else:
+            matches = cached["matches"]
 
-            # 分页：按文件分页，每页per_page个文件
-            start = (page - 1) * per_page
-            end = start + per_page
-            page_groups = groups[start:end]
+        total = len(matches)
 
-            # 收集该页文件的所有匹配
-            page_files = {g["file"] for g in page_groups}
-            page_results = [m for m in matches if m["file"] in page_files]
-            # 限制每文件只显示前3条
-            limited_results = []
-            file_count = {}
-            for m in page_results:
-                f = m["file"]
-                file_count[f] = file_count.get(f, 0) + 1
-                if file_count[f] <= 3:
-                    limited_results.append(m)
+        # 按文件分组
+        file_matches: dict = {}
+        for m in matches:
+            f = m["file"]
+            if f not in file_matches:
+                file_matches[f] = {"file": f, "matches": []}
+            file_matches[f]["matches"].append({"line": m["line"], "content": m["content"]})
+        groups = list(file_matches.values())
 
-            data = {
-                "results": limited_results,
-                "groups": page_groups,
-                "total": total,
-                "cached": False
-            }
+        # 按与当前文件的相似度排序（相似度高的排前面）
+        if current_file:
+            groups = sorted(groups, key=lambda g: -path_similarity(g["file"], current_file))
 
-            # 写入缓存（使用page=0存储完整结果供后续分页使用）
-            full_cache_path = GrepService._get_cache_path(
-                worktree_path.split('/')[-1], query, 0
-            )
-            full_data = {
-                "results": matches,
-                "groups": groups,
-                "total": total,
-                "cached": False
-            }
-            GrepService._write_cache(full_cache_path, full_data)
+        # 分页：按文件数分页
+        total_files = len(groups)
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_groups = groups[start:end]
 
-            return data
+        # 收集该页文件的所有匹配
+        page_files = {g["file"] for g in page_groups}
+        page_results = [m for m in matches if m["file"] in page_files]
+        # 限制每文件只显示前3条
+        limited_results = []
+        file_count = {}
+        for m in page_results:
+            f = m["file"]
+            file_count[f] = file_count.get(f, 0) + 1
+            if file_count[f] <= 5:
+                limited_results.append(m)
 
-        except subprocess.TimeoutExpired:
-            logger.error("ripgrep timed out")
-            return {"results": [], "groups": [], "total": 0, "cached": False, "error": "Search timed out"}
-        except Exception as e:
-            logger.error(f"ripgrep error: {e}")
-            return {"results": [], "groups": [], "total": 0, "cached": False, "error": str(e)}
+        return {
+            "results": limited_results,
+            "groups": page_groups,
+            "total": total_files,  # 返回文件数用于分页
+            "total_matches": total,  # 总匹配数（用于显示）
+            "cached": cached is not None
+        }
 
     @staticmethod
     def clear_cache(task_id: str):

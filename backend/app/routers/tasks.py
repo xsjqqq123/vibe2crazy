@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
 from app.models import Project, Task, TaskStatus, TaskStatusType, CodeStatusType
-from app.schemas import TaskCreate, TaskUpdate, TaskResponse, TaskStatusResponse, ButtonStatesResponse, AcceptRequest, AcceptResponse
+from app.schemas import TaskCreate, TaskUpdate, TaskResponse, TaskStatusResponse, AcceptRequest, AcceptResponse
 from app.auth import require_auth
 from app.services.git_service import GitService
 from app.services.tmux_service import TmuxService
@@ -337,93 +337,6 @@ async def get_task_status(
     )
 
 
-@task_router.get("/{task_id}/button-states", response_model=ButtonStatesResponse)
-async def get_button_states(
-    task_id: str,
-    db: Session = Depends(get_db),
-    current_user: Project = Depends(require_auth)
-):
-    """Get real-time button states based on current git state"""
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        logger.warning(f"Task {task_id} not found")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-
-    # Log input state
-    logger.debug(f"[Button States {task_id}] DB state: last_merge_hash={task.last_merge_commit_hash}, status={task.status}")
-
-    project = db.query(Project).filter(Project.id == task.project_id).first()
-    if not project:
-        logger.warning(f"Project {task.project_id} not found")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-
-    # Direct on branch tasks cannot merge
-    if task.direct_on_branch:
-        try:
-            changed_files = GitService.get_changed_files(task.worktree_path, project.main_branch)
-            has_uncommitted = len(changed_files) > 0
-            return ButtonStatesResponse(
-                can_accept=has_uncommitted,
-                can_merge=False,
-                reason="Direct on branch tasks do not support merge"
-            )
-        except Exception as e:
-            logger.error(f"Error getting button states for task {task_id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=str(e)
-            )
-
-    try:
-        # Check real-time git state
-        changed_files = GitService.get_changed_files(task.worktree_path, project.main_branch)
-        has_uncommitted = len(changed_files) > 0
-
-        # Get latest commit hash and compare with last_merge_commit_hash
-        latest_commit_hash = GitService.get_latest_commit_hash(task.worktree_path)
-        logger.debug(f"[Button States {task_id}] Git state: latest_hash={latest_commit_hash}")
-        has_unmerged = False
-        if task.last_merge_commit_hash:
-            # If we have a last_merge_commit_hash, check if different
-            has_unmerged = (latest_commit_hash != task.last_merge_commit_hash)
-        else:
-            # If no last_merge_commit_hash, can only merge if there's a commit
-            has_unmerged = (latest_commit_hash is not None)
-
-        # Log comparison result
-        logger.debug(f"[Button States {task_id}] Comparison: has_uncommitted={has_uncommitted}, has_unmerged={has_unmerged}")
-
-        can_accept = has_uncommitted
-        can_merge = has_unmerged and not has_uncommitted  # Removed task.status != "merged" check
-
-
-        # Log final calculation
-        logger.debug(f"[Button States {task_id}] can_merge={can_merge} = has_unmerged({has_unmerged}) AND !has_uncommitted({not has_uncommitted})")
-
-        reason = None
-        if not can_accept and not can_merge and not has_uncommitted and not has_unmerged:
-            reason = "No changes to accept or merge"
-
-        # Log response
-        logger.debug(f"[Button States {task_id}] Response: can_accept={can_accept}, can_merge={can_merge}, reason={reason}")
-
-        return ButtonStatesResponse(
-            can_accept=can_accept,
-            can_merge=can_merge,
-            reason=reason
-        )
-    except Exception as e:
-        logger.error(f"Error getting button states for task {task_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
 
 @router.post("/{task_id}/accept", response_model=AcceptResponse)
 async def accept_changes(

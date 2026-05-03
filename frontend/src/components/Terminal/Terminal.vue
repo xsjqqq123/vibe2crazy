@@ -173,16 +173,15 @@ const sendScrollCommand = (direction: 'up' | 'down', page: boolean = false) => {
 }
 
 // Page Up/Down button handlers
+// Send escape codes through PTY → tmux attach → tmux bindings (copy-mode -u / page-up / page-down)
 const handlePageUp = () => {
   if (!connected.value) return
-  // Enter scroll mode then scroll up one page
-  enterScrollMode()
-  sendScrollCommand('up', true)
+  send('\x1b[5~')
 }
 
 const handlePageDown = () => {
   if (!connected.value) return
-  sendScrollCommand('down', true)
+  send('\x1b[6~')
 }
 
 // Handle wheel events for local scrolling and scroll mode
@@ -293,19 +292,17 @@ const initTerminal = () => {
   })
 
   // Handle special keys for scroll mode (Page Up/Down)
-  // Use domEvent.code for reliable cross-browser detection
+  // Send escape codes through PTY → tmux bindings for reliable single-step handling
+  // onData filter below prevents duplicate sends from the escape code path
   xterm.value.onKey(({ key, domEvent }) => {
     const isPageUp = domEvent.code === 'PageUp' || key === '\x1b[5~'
     const isPageDown = domEvent.code === 'PageDown' || key === '\x1b[6~'
 
     if (isPageUp) {
-      // Enter scroll mode then scroll up one page
-      enterScrollMode()
-      sendScrollCommand('up', true)
+      send('\x1b[5~')
       domEvent.preventDefault()
     } else if (isPageDown) {
-      // Scroll down one page
-      sendScrollCommand('down', true)
+      send('\x1b[6~')
       domEvent.preventDefault()
     }
   })
@@ -431,9 +428,28 @@ const handleResize = () => {
     }
   }
 
+  // Mobile keyboard handling: visualViewport shrinks when keyboard opens,
+  // but layout viewport (innerHeight) stays the same. We need to adjust
+  // terminal height based on visualViewport to prevent keyboard from
+  // covering terminal content.
+  const handleVisualViewportResize = () => {
+    if (!window.visualViewport || !containerRef.value) return
+    const diff = window.innerHeight - window.visualViewport.height
+    if (diff > 100) {
+      // Keyboard is likely open — shrink container by keyboard height
+      containerRef.value.style.height = `calc(100% - ${diff}px)`
+    } else {
+      // Keyboard is likely closed — restore full height
+      containerRef.value.style.height = ''
+    }
+    // Trigger fit after layout adjustment
+    handleResize()
+  }
+
   onMounted(() => {
   initTerminal()
   window.addEventListener('resize', handleResize)
+  window.visualViewport?.addEventListener('resize', handleVisualViewportResize)
 
   // Use ResizeObserver to detect when container becomes visible or changes size
   resizeObserver.value = new ResizeObserver(() => {
@@ -491,6 +507,7 @@ onUnmounted(() => {
   // onUnmounted will handle the cleanup via reference counting
 
   window.removeEventListener('resize', handleResize)
+  window.visualViewport?.removeEventListener('resize', handleVisualViewportResize)
   resizeObserver.value?.disconnect()
 
   // Dispose xterm.js instance

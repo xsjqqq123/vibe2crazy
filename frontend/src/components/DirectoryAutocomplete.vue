@@ -69,7 +69,8 @@ watch(() => props.modelValue, (newValue) => {
 
 // Select a suggestion
 const selectSuggestion = (suggestion: string) => {
-  query.value = suggestion
+  // Auto-append slash to allow continued browsing
+  query.value = suggestion.endsWith('/') ? suggestion : suggestion + '/'
   showDropdown.value = false
   highlightedIndex.value = -1
 }

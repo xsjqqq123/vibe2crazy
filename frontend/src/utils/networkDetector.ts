@@ -197,7 +197,12 @@ class NetworkDetector {
     port: number,
     expectedHash: string
   ): Promise<ProbeResult> {
-    const url = `http://${ip}:${port}/api/tunnel/token_hash`
+    // Use the same protocol as the page.
+    // Note: from an HTTPS page, the browser blocks HTTP (Mixed Content)
+    // AND rejects untrusted certs (self-signed). Users must trust the
+    // self-signed cert first by visiting https://ip:port directly.
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
+    const url = `${protocol}//${ip}:${port}/api/tunnel/token_hash`
 
     try {
       const controller = new AbortController()
@@ -254,7 +259,11 @@ class NetworkDetector {
       // Find first matching address
       const match = results.find(r => r.matched)
       if (match) {
-        return `http://${match.ip}:${match.port}/api`
+        // If page is HTTPS, use HTTPS; otherwise use HTTP.
+        // (probeAddress already tried HTTPS first when page is HTTPS,
+        // so if match.matched is true, the connection succeeded.)
+        const protocol = window.location.protocol
+        return `${protocol}//${match.ip}:${match.port}/api`
       }
 
       return null

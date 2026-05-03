@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useTheme } from '@/composables/useTheme'
@@ -33,6 +33,13 @@ const {
 const showUpdateToast = ref(false)
 const showUpdateModal = ref(false)
 const updateDismissed = ref(false)
+
+// Show update toast when update is detected (non-blocking check)
+watch(hasUpdate, (hasUpdateVal) => {
+  if (hasUpdateVal && !updateDismissed.value) {
+    showUpdateToast.value = true
+  }
+})
 
 const projects = ref<Project[]>([])
 const loading = ref(true)
@@ -198,12 +205,9 @@ function dismissUpdateToast() {
 }
 
 onMounted(async () => {
-  await init()
-  await checkForUpdates()
-  if (hasUpdate.value && !updateDismissed.value) {
-    showUpdateToast.value = true
-  }
   loadProjects()
+  await init()
+  checkForUpdates()
 })
 </script>
 

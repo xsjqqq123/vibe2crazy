@@ -62,14 +62,6 @@ watch(() => props.commits, async (newCommits, oldCommits) => {
   }
 }, { deep: true })
 
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case 'A': return '+'
-    case 'M': return '~'
-    case 'D': return '×'
-    default: return '?'
-  }
-}
 
 const formatLocalDateTime = (dateStr: string) => {
   const date = new Date(dateStr)
@@ -143,28 +135,9 @@ const handleContextMenu = (e: MouseEvent, commit: CommitInfo) => {
         </div>
 
         <!-- Title: Commit message -->
-        <p class="text-sm text-main mb-2">
+        <p class="text-sm text-main">
           {{ commit.message || 'No message' }}
         </p>
-
-        <!-- Files (up to 5) -->
-        <div class="space-y-0.5">
-          <div
-            v-for="file in commit.files.slice(0, 5)"
-            :key="file.path"
-            class="text-xs flex items-center gap-1 text-sub"
-          >
-            <span class="file-status">{{ getStatusIcon(file.status) }}</span>
-            <span class="truncate">{{ file.path }}</span>
-            <span class="ml-auto shrink-0">
-              <span v-if="file.additions > 0" class="text-green-600">+{{ file.additions }}</span>
-              <span v-if="file.deletions > 0" class="text-red-600">-{{ file.deletions }}</span>
-            </span>
-          </div>
-          <div v-if="commit.files.length > 5" class="text-xs text-muted italic pl-4">
-            and {{ commit.files.length - 5 }} more files...
-          </div>
-        </div>
       </div>
     </div>
   </div>

@@ -782,14 +782,11 @@ class GitService:
 
             hash_val, date_str, message = line.split('|', 2)
 
-            # Get file changes for this commit
-            files = GitService._get_commit_files(worktree_path, hash_val)
-
             commits.append({
                 "hash": hash_val,
                 "date": date_str,
                 "message": message,
-                "files": files
+                "files": []
             })
 
         return commits
