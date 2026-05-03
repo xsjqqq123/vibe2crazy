@@ -82,9 +82,10 @@ frontend/.vite/
 logs/
 node_modules/
 release/data/
-release/logs/
 .claude/
+.playwright-mcp/
 .pytest_cache/
+Prompts.txt
 
 
 
