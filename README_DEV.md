@@ -90,41 +90,41 @@ The project includes a deployment script that supports both development and prod
 #### Development Mode
 
 ```bash
-./deploy.sh start      # 启动开发模式 (前端 5173, 后端 8863)
-./deploy.sh stop       # 停止开发模式
-./deploy.sh restart    # 重启开发模式
-./deploy.sh status     # 查看开发模式状态
+./deploy.sh start      # Start development mode (frontend 5173, backend 8863)
+./deploy.sh stop       # Stop development mode
+./deploy.sh restart    # Restart development mode
+./deploy.sh status     # Check development mode status
 ```
 
 #### Production Mode
 
 ```bash
-./deploy.sh start-prod     # 启动生产模式 (前端 8864, 后端 8863)
-./deploy.sh stop-prod      # 停止生产模式
-./deploy.sh restart-prod   # 重启生产模式
-./deploy.sh status-prod    # 查看生产模式状态
-./deploy.sh build          # 仅构建前端
+./deploy.sh start-prod     # Start production mode (frontend 8864, backend 8863)
+./deploy.sh stop-prod      # Stop production mode
+./deploy.sh restart-prod   # Restart production mode
+./deploy.sh status-prod    # Check production mode status
+./deploy.sh build          # Build frontend only
 ```
 
 #### Combined Commands
 
 ```bash
-./deploy.sh status-all    # 查看所有服务状态（开发+生产）
+./deploy.sh status-all    # Check all services status (dev + prod)
 ```
 
 #### Simultaneous Operation
 
-开发和生产模式可以同时运行在不同端口上：
-- **开发模式**: 前端 5173 (Vite dev server), 后端 8863 (Uvicorn with auto-reload)
-- **生产模式**: 前端 8864 (Python http.server), 后端 8863 (Uvicorn)
+Development and production modes can run simultaneously on different ports:
+- **Development mode**: Frontend 5173 (Vite dev server), Backend 8863 (Uvicorn with auto-reload)
+- **Production mode**: Frontend 8864 (Python http.server), Backend 8863 (Uvicorn)
 
 This allows you to run development mode for active work while keeping production mode available for testing or demonstration.
 
 #### Logging
 
-日志文件位置：
-- 开发模式: `logs/frontend.log`, `logs/backend.log`
-- 生产模式: `logs/frontend-prod.log`, `logs/backend-prod.log`
+Log file locations:
+- Development mode: `logs/frontend.log`, `logs/backend.log`
+- Production mode: `logs/frontend-prod.log`, `logs/backend-prod.log`
 
 ### Production (Manual)
 
