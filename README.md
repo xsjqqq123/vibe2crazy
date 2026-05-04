@@ -17,7 +17,8 @@ Access your development environment from anywhere. Generate code and run termina
 
 ### Install Guide
 
-- Download binary file(vibe2crazy) in this project's release dir. Only support ubuntu x64.
+- sudo apt-get install git tmux ripgrep openssl universal-ctags
+- Download binary file(vibe2crazy) in this project's release dir. Only support ubuntu x64 now.
 - chmod +x vibe2crazy
 - ./vibe2crazy
 - then visit the web page at `localhost:8863`. Change default password when first acess.
