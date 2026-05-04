@@ -1,10 +1,15 @@
 # Vibe2Crazy - Remote Code Editing Tool
 
-Access your development environment from anywhere. Generate code and run terminals remotely through your browser.
-<img width="480" height="1056" alt="20260503233504_321_50" src="https://github.com/user-attachments/assets/4d6514a7-0482-49c5-b804-64f90c60da04" />
-<br>
-<img width="480" height="1056" alt="20260503233506_323_50" src="https://github.com/user-attachments/assets/d2f6e1e2-cc68-4269-9df4-6eb712a5c71e" />
+your development environment from anywhere. Generate code and run terminals remotely through your browser.
+| Terminal | Files |
+|-----|-----|
+|<img width="320" height="704" alt="20260503233504_321_50" src="https://github.com/user-attachments/assets/4d6514a7-0482-49c5-b804-64f90c60da04" />|<img width="320" height="704" alt="20260503233506_323_50" src="https://github.com/user-attachments/assets/d2f6e1e2-cc68-4269-9df4-6eb712a5c71e" />|
 
+Edit files on desktop:
+<img width="2549" height="1352" alt="ScreenShot_2026-05-04_093318_605" src="https://github.com/user-attachments/assets/cf5f0403-b6a2-4c58-b989-f03851a49d60" />
+
+Terminal matrix on desktop:
+<img width="2549" height="1352" alt="ScreenShot_2026-05-04_092223_067" src="https://github.com/user-attachments/assets/9e57c821-5895-46a6-87dd-e0510988e354" />
 
 ## Key Features
 
