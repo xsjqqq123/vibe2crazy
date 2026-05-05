@@ -575,11 +575,13 @@ watch(layout, (newLayout, oldLayout) => {
 }, { deep: true })
 
 // Reset to page 1 when task changes and cleanup old terminal connection
-watch(taskId, async (_newId, oldId) => {
+// Skip when oldId is empty - onMounted handles initial load to avoid duplicate requests
+watch(taskId, async (newId, oldId) => {
+  // Skip if this is the initial load (no oldId) - onMounted already handles this
+  if (!oldId) return
+
   // Close old task's terminal connection when switching tasks
-  if (oldId) {
-    closePersistentConnection(oldId)
-  }
+  closePersistentConnection(oldId)
   currentPage.value = 1
   changedFilesPage.value = 1
   await loadTask()
