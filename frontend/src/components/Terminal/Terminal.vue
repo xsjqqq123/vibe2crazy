@@ -383,6 +383,11 @@ const handleResize = () => {
       return
     }
 
+    // Check if container has valid render dimensions (not size=0 from splitpanes)
+    if (containerRef.value.offsetWidth <= 0 || containerRef.value.offsetHeight <= 0) {
+      return  // Container size is 0, skip resize
+    }
+
     fitAddon.value?.fit()
     // Update backend with new dimensions
     if (xterm.value) {
@@ -453,8 +458,11 @@ const handleResize = () => {
 
   // Use ResizeObserver to detect when container becomes visible or changes size
   resizeObserver.value = new ResizeObserver(() => {
-    // Check if container is visible
-    if (containerRef.value && containerRef.value.offsetParent !== null) {
+    // Check if container is visible AND has valid size
+    if (containerRef.value &&
+        containerRef.value.offsetParent !== null &&
+        containerRef.value.offsetWidth > 0 &&
+        containerRef.value.offsetHeight > 0) {
       // Debounce and retry fit to handle layout timing issues
       if (resizeTimeout) clearTimeout(resizeTimeout)
 
