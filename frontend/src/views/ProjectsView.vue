@@ -217,6 +217,7 @@ onMounted(async () => {
     <UpdateToast
       :visible="showUpdateToast"
       :version="latestVersionInfo?.version || ''"
+      :current-version="currentVersion"
       @view-details="openUpdateModal"
       @dismiss="dismissUpdateToast"
     />

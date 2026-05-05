@@ -5,7 +5,7 @@
       <div class="toast-content">
         <span class="toast-icon">📦</span>
         <span class="toast-message">
-          New version v{{ version }} available.
+          New version v{{ version }} available (current: v{{ currentVersion }}).
           <button class="view-btn" @click="viewDetails">View details</button>
         </span>
       </div>
@@ -18,6 +18,7 @@
 interface Props {
   visible: boolean
   version: string
+  currentVersion: string
 }
 
 defineProps<Props>()
