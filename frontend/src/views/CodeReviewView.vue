@@ -1,18 +1,11 @@
 <script setup lang="ts">
-// Type declaration for window property used by ResizeObserver
-declare global {
-  interface Window {
-    __editorResizeObserver?: ResizeObserver
-  }
-}
-
 import { ref, onMounted, computed, onUnmounted, watch, nextTick, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 import { useConfirm } from '@/composables/useConfirm'
 import { useMainStore } from '@/store'
 import filesApi from '@/api/files'
-import tasksApi, { type Task } from '@/api/tasks'
+import tasksApi, { type Task, type TaskStatusType, type CodeStatusType } from '@/api/tasks'
 import projectsApi from '@/api/projects'
 import { gitApi, type CommitInfo, type PaginatedCommitsResponse } from '@/api/git'
 import { type ChangedFileInfo, type PaginatedChangedFilesResponse } from '@/api/files'
@@ -33,6 +26,12 @@ import { useSymbolOutline, type SymbolInfo } from '@/composables/useSymbolOutlin
 import { detectLanguage, supportsSymbolExtraction } from '@/utils/languageDetection'
 import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
 import { closePersistentConnection } from '@/composables/useWebSocket'
+import MonacoEditor from '@/components/Monaco/MonacoEditor.vue'
+import MonacoDiffEditor from '@/components/Monaco/MonacoDiffEditor.vue'
+import Terminal from '@/components/Terminal/Terminal.vue'
+import CommitsList from '@/components/CommitsList.vue'
+import CommitDiffView from '@/components/CommitDiffView.vue'
+import Pagination from '@/components/Pagination.vue'
 
 
 interface Layout {
@@ -254,7 +253,7 @@ async function openPdfInBrowser() {
   pdfError.value = null
   pdfDownloadProgress.value = null
   try {
-    const blob = await filesApi.getRawFile(taskId.value, pdfPromptFile.value, (progress) => {
+    const blob = await filesApi.getRawFile(taskId.value, pdfPromptFile.value, (progress: { loaded: number; total: number }) => {
       pdfDownloadProgress.value = progress
     })
     const url = URL.createObjectURL(blob)
@@ -398,14 +397,19 @@ const saveLayout = () => {
   }, 100)
 }
 
-const loadLayout = () => {
+const loadLayout = (taskIdParam?: string) => {
+  // Use provided taskId or fall back to computed taskId
+  const effectiveTaskId = taskIdParam || taskId.value
+  const storageKey = `vibe2crazy-layout-${effectiveTaskId}`
+
   console.log('[Layout Debug] loadLayout called', {
-    storageKey: STORAGE_KEY.value,
-    taskId: taskId.value
+    storageKey,
+    taskId: effectiveTaskId,
+    providedParam: taskIdParam
   })
 
   try {
-    const saved = localStorage.getItem(STORAGE_KEY.value)
+    const saved = localStorage.getItem(storageKey)
     console.log('[Layout Debug] Raw value from localStorage', saved)
     if (saved) {
       try {
@@ -576,7 +580,7 @@ watch(layout, (newLayout, oldLayout) => {
 
 // Reset to page 1 when task changes and cleanup old terminal connection
 // Skip when oldId is empty - onMounted handles initial load to avoid duplicate requests
-watch(taskId, async (newId, oldId) => {
+watch(taskId, async (_newId, oldId) => {
   // Skip if this is the initial load (no oldId) - onMounted already handles this
   if (!oldId) return
 
@@ -1244,7 +1248,7 @@ const refreshAllTasksStatus = async () => {
     const results = await Promise.all(
       tasks.value.map(t => tasksApi.getStatus(t.id))
     )
-    results.forEach((status, index) => {
+    results.forEach((status: { task_status: TaskStatusType; code_status: CodeStatusType }, index: number) => {
       tasks.value[index].task_status = status.task_status
       tasks.value[index].code_status = status.code_status
     })
@@ -1389,7 +1393,7 @@ const handlePageChange = (page: number) => {
   loadingCommits.value = true
 
   gitApi.getWorktreeCommits(taskId.value, page)
-    .then((data) => {
+    .then((data: PaginatedCommitsResponse | null) => {
       commitsData.value = data
       commits.value = data?.items || []
     })
@@ -1889,7 +1893,7 @@ onMounted(async () => {
   }
 
   if (targetTaskId) {
-    loadLayout()
+    loadLayout(targetTaskId)
     await loadTask(targetTaskId)
     loadFileTree()
     loadChangedFiles().then(() => { initialLoading.value = false })
@@ -1903,10 +1907,29 @@ onMounted(async () => {
   // This allows us to calculate terminal percentage from pixel width
   const setupResizeObserver = () => {
     if (editorSplitpanesRef.value?.$el) {
+      let isFirstMeasurement = true
+
       const updateEditorContainerWidth = () => {
         if (editorSplitpanesRef.value?.$el) {
+          const oldWidth = editorContainerWidth.value
           editorContainerWidth.value = editorSplitpanesRef.value.$el.offsetWidth
           console.log('[Layout Debug] Editor container width updated', editorContainerWidth.value)
+
+          // On first measurement with saved terminal size, apply it to splitpanes
+          // This fixes the timing issue where terminalPercent was 0 when editorContainerWidth was 0
+          if (isFirstMeasurement && oldWidth === 0 && editorContainerWidth.value > 0 && layout.value.terminalPx > 0) {
+            isFirstMeasurement = false
+            const editorPanes = (editorSplitpanesRef.value as any)?.panes
+            if (editorPanes && editorPanes.length >= 2 && showTerminal.value) {
+              const terminalPercentValue = Math.max(10, Math.min(90, (layout.value.terminalPx / editorContainerWidth.value) * 100))
+              editorPanes[0].size = 100 - terminalPercentValue
+              editorPanes[1].size = terminalPercentValue
+              console.log('[Layout Debug] Applied saved terminal size on first measurement', {
+                terminalPx: layout.value.terminalPx,
+                percent: terminalPercentValue
+              })
+            }
+          }
         }
       }
 
@@ -2899,16 +2922,13 @@ onUnmounted(() => {
 </template>
 
 <script lang="ts">
-import Terminal from '@/components/Terminal/Terminal.vue'
-import MonacoEditor from '@/components/Monaco/MonacoEditor.vue'
-import MonacoDiffEditor from '@/components/Monaco/MonacoDiffEditor.vue'
-import CommitsList from '@/components/CommitsList.vue'
-import CommitDiffView from '@/components/CommitDiffView.vue'
-import Pagination from '@/components/Pagination.vue'
-
-export default {
-  components: { Terminal, MonacoEditor, MonacoDiffEditor, CommitsList, CommitDiffView, Pagination }
+// Type declaration for window property used by ResizeObserver
+declare global {
+  interface Window {
+    __editorResizeObserver?: ResizeObserver
+  }
 }
+export {}
 </script>
 
 <style>
