@@ -40,7 +40,7 @@ const xterm = ref<XTerminal | null>(null)
 const fitAddon = ref<FitAddon | null>(null)
 const resizeObserver = ref<ResizeObserver | null>(null)
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null
-let initialResizeTimer: ReturnType<typeof setTimeout> | null = null
+let stableTimer: ReturnType<typeof setTimeout> | null = null
 let wheelHandler: ((e: WheelEvent) => void) | null = null
 
 const { connected, connecting, connectionType, connect, setupNetworkListener, send, sendRaw, resize } = useWebSocket(props.taskId, { persistOnUnmount: true })
@@ -307,43 +307,47 @@ const initTerminal = () => {
     }
   })
 
-  // Wait for container size to stabilize (2s) before sending initial resize
-  // This prevents sending wrong dimensions during layout transitions (e.g. tunnel access)
-  let lastInitialDims = { cols: 0, rows: 0 }
+  // Use debounce to wait for layout to stabilize before connecting
+  // This ensures PTY is created with correct dimensions from the start
+  let initialResizeDone = false
+  let lastCheckedDims = { cols: 0, rows: 0 }
 
-  const tryInitialResize = () => {
+  const checkAndConnect = () => {
     if (!fitAddon.value || !xterm.value) return
     fitAddon.value.fit()
     const { cols, rows } = xterm.value
-    if (cols === lastInitialDims.cols && rows === lastInitialDims.rows) {
-      // Size unchanged for 2s — stable, send resize
-      console.log(`[Terminal] Initial resize (stable): ${cols}x${rows}`)
-      resize(cols, rows)
-      initialResizeDone = true
-    } else {
-      // Size changed, restart 2s timer
-      lastInitialDims = { cols, rows }
-      initialResizeTimer = setTimeout(tryInitialResize, 2000)
-    }
-  }
-  lastInitialDims = { cols: xterm.value.cols, rows: xterm.value.rows }
-  initialResizeTimer = setTimeout(tryInitialResize, 2000)
 
-  // Handle terminal resize events (after initial stabilization)
-  let initialResizeDone = false
+    // If size changed, restart debounce timer
+    if (cols !== lastCheckedDims.cols || rows !== lastCheckedDims.rows) {
+      lastCheckedDims = { cols, rows }
+      if (stableTimer) clearTimeout(stableTimer)
+      stableTimer = setTimeout(checkAndConnect, 300) // 300ms debounce
+      return
+    }
+
+    // Size stable for 300ms — connect now
+    console.log(`[Terminal] Layout stable, connecting: ${cols}x${rows}`)
+    initialResizeDone = true
+    stableTimer = null
+
+    // Setup network change listener for auto-reconnect
+    setupNetworkListener()
+
+    // Connect with stable terminal size
+    connect((data: string) => {
+      xterm.value?.write(data)
+      checkApiError()
+    }, { cols, rows })
+  }
+
+  // Start debounce check after initial fit
+  lastCheckedDims = { cols: xterm.value.cols, rows: xterm.value.rows }
+  stableTimer = setTimeout(checkAndConnect, 300)
+
+  // Handle terminal resize events (after initial connection)
   xterm.value.onResize(({ cols, rows }) => {
     if (!initialResizeDone) return
     resize(cols, rows)
-  })
-
-  // Setup network change listener for auto-reconnect
-  setupNetworkListener()
-
-  // Connect immediately - network detection runs in background
-  // Resize will be queued as pendingResize and sent when connection opens
-  connect((data: string) => {
-    xterm.value?.write(data)
-    checkApiError()
   })
 
   // Watch connection status
@@ -498,7 +502,7 @@ const handleResize = () => {
 
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
-  if (initialResizeTimer) clearTimeout(initialResizeTimer)
+  if (stableTimer) clearTimeout(stableTimer)
   if (apiErrorTimer) clearTimeout(apiErrorTimer)
 
   // Clean up wheel event listener
