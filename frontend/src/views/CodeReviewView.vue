@@ -1,4 +1,11 @@
 <script setup lang="ts">
+// Type declaration for window property used by ResizeObserver
+declare global {
+  interface Window {
+    __editorResizeObserver?: ResizeObserver
+  }
+}
+
 import { ref, onMounted, computed, onUnmounted, watch, nextTick, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
@@ -33,7 +40,7 @@ interface Layout {
   filesPane: number      // File tree height
   tabbedPane: number     // Changes/Commits middle pane
   tasksPane: number      // Task list at bottom
-  terminal: number
+  terminalPx: number     // Terminal width in pixels (not percentage)
 }
 
 const router = useRouter()
@@ -315,7 +322,25 @@ const layout = ref<Layout>({
   filesPane: 55,
   tabbedPane: 30,
   tasksPane: 15,
-  terminal: 50
+  terminalPx: 600    // Terminal width in pixels
+})
+
+// Track the editor+terminal container width to calculate terminal percentage
+const editorContainerWidth = ref(0)
+
+// Calculate terminal percentage from pixel width
+const terminalPercent = computed(() => {
+  if (!showTerminal.value || editorContainerWidth.value <= 0) return 0
+  const percent = (layout.value.terminalPx / editorContainerWidth.value) * 100
+  // Clamp between 10% and 90%
+  const result = Math.max(10, Math.min(90, percent))
+  console.log('[Layout Debug] terminalPercent computed', {
+    terminalPx: layout.value.terminalPx,
+    editorContainerWidth: editorContainerWidth.value,
+    percent: percent,
+    result: result
+  })
+  return result
 })
 
 // Splitpanes refs for programmatic control
@@ -388,16 +413,28 @@ const loadLayout = () => {
         console.log('[Layout Debug] Parsed layout', parsed)
 
         // Validate parsed layout has all required fields
+        // Support both old format (terminal) and new format (terminalPx)
+        const hasTerminalPx = typeof parsed.terminalPx === 'number'
+        const hasOldTerminal = typeof parsed.terminal === 'number'
         if (typeof parsed.sidebar === 'number' &&
             typeof parsed.filesPane === 'number' &&
             typeof parsed.tabbedPane === 'number' &&
             typeof parsed.tasksPane === 'number' &&
-            typeof parsed.terminal === 'number') {
+            (hasTerminalPx || hasOldTerminal)) {
 
           console.log('[Layout Debug] Applying parsed layout to layout.value')
 
           // Set flag to prevent saving while loading
           isLoadingLayout.value = true
+
+          // Handle backward compatibility: old format had 'terminal' (percentage), new format has 'terminalPx' (pixels)
+          if (!hasTerminalPx && hasOldTerminal) {
+            // Old format - clear the terminal field and use default pixel width
+            // We can't convert percentage to pixels without knowing the container width at load time
+            parsed.terminalPx = 600  // Default
+            delete parsed.terminal
+            console.log('[Layout Debug] Converted old terminal format to terminalPx=600')
+          }
 
           // Update the reactive layout value
           layout.value = parsed
@@ -431,11 +468,8 @@ const loadLayout = () => {
               sidebarPanes[1].size = parsed.tabbedPane
               sidebarPanes[2].size = parsed.tasksPane
             }
-            if (editorPanes && editorPanes.length >= 2 && showTerminal.value) {
-              console.log('[Layout Debug] Setting editor splitpanes sizes', [100 - parsed.terminal, parsed.terminal])
-              editorPanes[0].size = 100 - parsed.terminal
-              editorPanes[1].size = parsed.terminal
-            }
+            // Editor panes sizes are controlled by terminalPercent computed property
+            // Don't set them programmatically - the template binding handles it
 
             // Clear flag after a delay to allow splitpanes to process changes
             setTimeout(() => {
@@ -485,11 +519,13 @@ const handleSidebarResize = (event: LayoutEvent) => {
 }
 
 const handleEditorResize = (event: LayoutEvent) => {
-  console.log('[Layout Debug] handleEditorResize called', { event, showTerminal: showTerminal.value })
+  console.log('[Layout Debug] handleEditorResize called', { event, showTerminal: showTerminal.value, editorContainerWidth: editorContainerWidth.value })
   const panes = (event as any).panes
-  if (showTerminal.value && panes && panes.length >= 2) {
-    layout.value.terminal = Math.round(panes[1].size)
-    console.log('[Layout Debug] Updated terminal size', layout.value.terminal)
+  if (showTerminal.value && panes && panes.length >= 2 && editorContainerWidth.value > 0) {
+    // Convert percentage back to pixels
+    const terminalPercentValue = panes[1].size
+    layout.value.terminalPx = Math.round((terminalPercentValue / 100) * editorContainerWidth.value)
+    console.log('[Layout Debug] Updated terminal size', { percent: terminalPercentValue, pixels: layout.value.terminalPx })
   }
 }
 
@@ -524,8 +560,8 @@ watch(showMergeDialog, (isOpen) => {
 })
 
 watch(showTerminal, (isShown) => {
-  if (isShown && layout.value.terminal === 0) {
-    layout.value.terminal = 50
+  if (isShown && layout.value.terminalPx === 0) {
+    layout.value.terminalPx = 600  // Default terminal width in pixels
   }
 })
 
@@ -568,8 +604,12 @@ watch(() => layout.value.tabbedPane, (newVal, oldVal) => {
 watch(() => layout.value.tasksPane, (newVal, oldVal) => {
   console.log('[Layout Debug] tasksPane changed', { old: oldVal, new: newVal })
 })
-watch(() => layout.value.terminal, (newVal, oldVal) => {
-  console.log('[Layout Debug] terminal changed', { old: oldVal, new: newVal })
+watch(() => layout.value.terminalPx, (newVal, oldVal) => {
+  console.log('[Layout Debug] terminalPx changed', { old: oldVal, new: newVal })
+})
+
+watch(editorContainerWidth, (newVal, oldVal) => {
+  console.log('[Layout Debug] editorContainerWidth changed', { old: oldVal, new: newVal })
 })
 
 // Update markdown preview content in real-time
@@ -1857,6 +1897,38 @@ onMounted(async () => {
     startRefresh()
   }
 
+  // Setup ResizeObserver after layout is loaded (splitpanes are rendered)
+  // This allows us to calculate terminal percentage from pixel width
+  const setupResizeObserver = () => {
+    if (editorSplitpanesRef.value?.$el) {
+      const updateEditorContainerWidth = () => {
+        if (editorSplitpanesRef.value?.$el) {
+          editorContainerWidth.value = editorSplitpanesRef.value.$el.offsetWidth
+          console.log('[Layout Debug] Editor container width updated', editorContainerWidth.value)
+        }
+      }
+
+      // Initial measurement
+      updateEditorContainerWidth()
+
+      // Setup ResizeObserver for continuous tracking
+      const resizeObserver = new ResizeObserver(() => {
+        updateEditorContainerWidth()
+      })
+      resizeObserver.observe(editorSplitpanesRef.value.$el)
+      // Store observer for cleanup
+      window.__editorResizeObserver = resizeObserver
+      console.log('[Layout Debug] ResizeObserver setup complete')
+    } else {
+      // Retry after a short delay if splitpanes not ready
+      console.log('[Layout Debug] editorSplitpanesRef not ready, retrying...')
+      setTimeout(setupResizeObserver, 100)
+    }
+  }
+
+  // Start setting up ResizeObserver after a delay to ensure layout is loaded
+  setTimeout(setupResizeObserver, 300)
+
   console.log('[Layout Debug] onMounted completed')
 })
 
@@ -1879,6 +1951,11 @@ onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('keydown', handleGlobalKeydown)
   stopRefresh()
+  // Clean up ResizeObserver
+  if (window.__editorResizeObserver) {
+    window.__editorResizeObserver.disconnect()
+    delete window.__editorResizeObserver
+  }
   // Clean up banner timer
   if (directBranchBannerTimer) clearTimeout(directBranchBannerTimer)
   // Clean up image preview URL
@@ -2198,7 +2275,7 @@ onUnmounted(() => {
             :size="(isMobile && showFileList) ? 0 : (isMobile ? 100 : (100 - layout.sidebar))"
             :min-size="(isMobile && showFileList) ? 0 : 20">
         <splitpanes ref="editorSplitpanesRef" vertical class="default-theme h-full min-h-0" @resize="handleEditorResize">
-          <pane :size="isMobile && showTerminal ? 0 : (showTerminal ? (100 - layout.terminal) : 100)" :min-size="isMobile && showTerminal ? 0 : 20" class="flex flex-col min-h-0">
+          <pane :size="isMobile && showTerminal ? 0 : (showTerminal ? (100 - terminalPercent) : 100)" :min-size="isMobile && showTerminal ? 0 : (showTerminal ? 10 : 20)" class="flex flex-col min-h-0">
             <!-- Editor area -->
             <main class="flex-1 flex flex-col overflow-hidden bg-main">
               <!-- Editor header -->
@@ -2476,7 +2553,7 @@ onUnmounted(() => {
           </pane>
 
           <!-- Terminal pane - always rendered to keep WebSocket alive, size=0 when hidden -->
-          <pane v-if="!showFileList" :size="showTerminal ? (isMobile ? 100 : layout.terminal) : 0" :min-size="showTerminal ? (isMobile ? 100 : 10) : 0" class="flex flex-col min-h-0">
+          <pane v-if="!showFileList" :size="showTerminal ? (isMobile ? 100 : terminalPercent) : 0" :min-size="showTerminal ? (isMobile ? 100 : 10) : 0" class="flex flex-col min-h-0">
             <div class="w-full bg-main border-l border-main flex-1 flex flex-col min-h-0">
               <Terminal :key="taskId" :task-id="taskId" />
             </div>
