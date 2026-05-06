@@ -279,7 +279,27 @@ defineExpose({
     }
   },
   getModel: () => editor?.getModel() || null,
-  getValue: () => editor?.getValue() || ''
+  getValue: () => editor?.getValue() || '',
+  // Position and scroll methods for state restoration
+  getEditor: () => editor,
+  getPosition: () => editor?.getPosition() || null,
+  getScrollTop: () => editor?.getScrollTop() || 0,
+  getScrollLeft: () => editor?.getScrollLeft() || 0,
+  setScrollPosition: (pos: { scrollTop: number; scrollLeft: number }) => {
+    if (editor) {
+      editor.setScrollPosition(pos)
+    }
+  },
+  setPosition: (pos: { lineNumber: number; column: number }) => {
+    if (editor) {
+      editor.setPosition(pos)
+    }
+  },
+  revealLineInCenter: (lineNumber: number) => {
+    if (editor) {
+      editor.revealLineInCenter(lineNumber)
+    }
+  }
 })
 </script>
 

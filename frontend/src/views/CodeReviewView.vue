@@ -42,6 +42,24 @@ interface Layout {
   terminalPx: number     // Terminal width in pixels (not percentage)
 }
 
+interface HistoryEntry {
+  filePath: string
+  cursorPosition: { line: number; column: number }
+  scrollPosition: { top: number; left: number }
+  timestamp: number
+}
+
+interface EditorViewState {
+  filePath: string | null
+  fileContent: string
+  originalContent: string  // For main editor diff mode only
+  editorMode: 'editor' | 'diff' | 'commit-diff' | 'deleted' | 'conflict'  // Only used by main editor
+  history: HistoryEntry[]
+  cursorPosition: { line: number; column: number } | null
+  scrollPosition: { top: number; left: number } | null
+  isFileDeleted: boolean  // Only used by main editor
+}
+
 const router = useRouter()
 const route = useRoute()
 const { theme, cycleTheme } = useTheme()
@@ -114,6 +132,53 @@ const savingContent = ref(false)
 const saveError = ref('')
 const editorMode = ref<'editor' | 'diff' | 'commit-diff' | 'deleted' | 'conflict'>('editor')
 const isFileDeleted = ref(false)
+
+// Multi-view editor state (for preview panes)
+const mainEditorState = ref<EditorViewState>({
+  filePath: null,
+  fileContent: '',
+  originalContent: '',
+  editorMode: 'editor',
+  history: [],
+  cursorPosition: null,
+  scrollPosition: null,
+  isFileDeleted: false
+})
+const preview1State = ref<EditorViewState>({
+  filePath: null,
+  fileContent: '',
+  originalContent: '',
+  editorMode: 'editor',
+  history: [],
+  cursorPosition: null,
+  scrollPosition: null,
+  isFileDeleted: false
+})
+const preview2State = ref<EditorViewState>({
+  filePath: null,
+  fileContent: '',
+  originalContent: '',
+  editorMode: 'editor',
+  history: [],
+  cursorPosition: null,
+  scrollPosition: null,
+  isFileDeleted: false
+})
+
+// Layout state for multi-view
+const showPreviews = ref(false)  // Combined toggle for both previews
+const activeView = ref<'main' | 'preview1' | 'preview2'>('main')
+const previewCycle = ref<'preview1' | 'preview2'>('preview1')  // Tracks which preview to use next
+
+// Computed helpers for multi-view (used by subsequent tasks)
+const currentPreviewState = computed(() => {
+  if (activeView.value === 'preview1') return preview1State.value
+  if (activeView.value === 'preview2') return preview2State.value
+  return null
+})
+const hasPreviewContent = computed(() => {
+  return preview1State.value.filePath !== null || preview2State.value.filePath !== null
+})
 
 // Mobile state
 const showFileList = ref(false)
@@ -203,6 +268,45 @@ const outlineCollapsed = ref(localStorage.getItem('v2c-outline-collapsed') === '
 const previewCollapsed = ref(localStorage.getItem('v2c-preview-collapsed') === 'true')
 const editorRef = ref<InstanceType<typeof MonacoEditor> | null>(null)
 const outlineRef = ref<InstanceType<typeof SymbolOutline> | null>(null)
+
+// Position saving/restoring functions for editor state
+const saveEditorPosition = (viewState: EditorViewState) => {
+  if (!viewState.filePath || !editorRef.value) return
+
+  const position = editorRef.value.getPosition()
+  if (!position) return
+
+  const scrollTop = editorRef.value.getScrollTop()
+  const scrollLeft = editorRef.value.getScrollLeft()
+
+  // Update history entry for current file
+  const historyEntry = viewState.history.find(h => h.filePath === viewState.filePath)
+  if (historyEntry) {
+    historyEntry.cursorPosition = { line: position.lineNumber, column: position.column }
+    historyEntry.scrollPosition = { top: scrollTop, left: scrollLeft }
+  }
+}
+
+const restoreEditorPosition = (viewState: EditorViewState, entry: HistoryEntry) => {
+  setTimeout(() => {
+    if (!editorRef.value) return
+
+    // Restore scroll first (instant)
+    editorRef.value.setScrollPosition({
+      scrollTop: entry.scrollPosition.top,
+      scrollLeft: entry.scrollPosition.left
+    })
+
+    // Restore cursor position
+    editorRef.value.setPosition({
+      lineNumber: entry.cursorPosition.line,
+      column: entry.cursorPosition.column
+    })
+
+    // Reveal line in center
+    editorRef.value.revealLineInCenter(entry.cursorPosition.line)
+  }, 100)
+}
 
 // Settings modal
 const showSettingsModal = ref(false)
