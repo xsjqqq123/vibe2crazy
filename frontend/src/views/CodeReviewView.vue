@@ -179,6 +179,51 @@ const currentPreviewState = computed(() => {
 const hasPreviewContent = computed(() => {
   return preview1State.value.filePath !== null || preview2State.value.filePath !== null
 })
+const hasMainEditorContent = computed(() => {
+  return mainEditorState.value.filePath !== null
+})
+
+// Watch for preview toggle changes (will sync with terminal visibility in subsequent tasks)
+watch(showPreviews, (show) => {
+  // When previews are hidden, reset preview states
+  if (!show) {
+    previewCycle.value = 'preview1'
+    // Clear preview content when hiding (uses computed to check)
+    if (hasPreviewContent.value) {
+      preview1State.value.filePath = null
+      preview2State.value.filePath = null
+    }
+  }
+})
+
+// Watch activeView to track focus (will be used for keyboard shortcuts)
+watch(activeView, (view) => {
+  // Log current preview state for debugging (will be replaced with actual logic)
+  if (view !== 'main' && currentPreviewState.value) {
+    console.debug('Active preview:', view, currentPreviewState.value.filePath)
+  }
+  // Also log main editor state when switching back
+  if (view === 'main' && hasMainEditorContent.value) {
+    console.debug('Main editor active:', mainEditorState.value.filePath)
+  }
+})
+
+// Watch currentFile to save/restore position using mainEditorState
+watch(currentFile, (newFile, oldFile) => {
+  // Save position for previous file
+  if (oldFile && mainEditorState.value.filePath === oldFile) {
+    saveEditorPosition(mainEditorState.value)
+  }
+  // Update mainEditorState to track current file
+  if (newFile) {
+    mainEditorState.value.filePath = newFile
+    // Find and restore position from history
+    const historyEntry = mainEditorState.value.history.find(h => h.filePath === newFile)
+    if (historyEntry) {
+      restoreEditorPosition(mainEditorState.value, historyEntry)
+    }
+  }
+})
 
 // Mobile state
 const showFileList = ref(false)
@@ -288,8 +333,9 @@ const saveEditorPosition = (viewState: EditorViewState) => {
 }
 
 const restoreEditorPosition = (viewState: EditorViewState, entry: HistoryEntry) => {
+  // viewState is passed for consistency with saveEditorPosition but entry contains the actual position data
   setTimeout(() => {
-    if (!editorRef.value) return
+    if (!editorRef.value || !viewState.filePath) return
 
     // Restore scroll first (instant)
     editorRef.value.setScrollPosition({
