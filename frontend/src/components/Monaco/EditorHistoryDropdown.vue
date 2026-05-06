@@ -1,15 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-
-/**
- * History entry structure for tracking file navigation history
- */
-export interface HistoryEntry {
-  filePath: string
-  cursorPosition: { line: number; column: number }
-  scrollPosition: { top: number; left: number }
-  timestamp: number
-}
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { type HistoryEntry } from '@/types/editor'
 
 interface Props {
   history: HistoryEntry[]
@@ -38,6 +29,22 @@ const handleSelect = (entry: HistoryEntry) => {
 const getFileName = (filePath: string) => {
   return filePath.split('/').pop() || filePath
 }
+
+// Click-outside handler to close dropdown
+const handleClickOutside = (event: MouseEvent) => {
+  const dropdownEl = document.querySelector('.editor-history-dropdown')
+  if (dropdownEl && !dropdownEl.contains(event.target as Node)) {
+    showDropdown.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <template>
@@ -47,7 +54,7 @@ const getFileName = (filePath: string) => {
       v-if="history.length > 0"
       class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
       :title="'Recent files (' + history.length + ')'"
-      @click="showDropdown = !showDropdown"
+      @click.stop="showDropdown = !showDropdown"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -76,7 +83,7 @@ const getFileName = (filePath: string) => {
           :key="entry.filePath + entry.timestamp"
           class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
           :class="{ 'bg-blue-50 dark:bg-blue-900/20': entry.filePath === currentFile }"
-          @click="handleSelect(entry)"
+          @click.stop="handleSelect(entry)"
         >
           <div class="text-sm font-medium text-main truncate">
             {{ getFileName(entry.filePath) }}

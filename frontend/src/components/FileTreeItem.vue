@@ -18,15 +18,7 @@ const emit = defineEmits<{
 
 const { nodes, expandedDirs } = injectFileTree()
 
-const node = computed(() => {
-  const n = nodes.value.get(props.path)
-  // Debug: check if node exists
-  if (!n) {
-    // Log once to console for debugging
-    console.warn('[FileTreeItem] Node not found for path:', props.path, 'Available:', Array.from(nodes.value.keys()))
-  }
-  return n
-})
+const node = computed(() => nodes.value.get(props.path))
 const isExpanded = computed(() => node.value?.type === 'directory' && expandedDirs.value.has(props.path))
 const childPaths = computed(() => {
   const n = node.value
@@ -34,18 +26,12 @@ const childPaths = computed(() => {
 })
 
 const handleClick = () => {
-  console.log('[FileTreeItem] handleClick called, path:', props.path, 'node:', node.value)
-  if (!node.value) {
-    console.log('[FileTreeItem] handleClick: node is null, returning')
-    return
-  }
+  if (!node.value) return
 
   // Emit click event
   if (node.value.type === 'directory') {
-    console.log('[FileTreeItem] emitting toggle for directory')
     emit('toggle', props.path)
   } else {
-    console.log('[FileTreeItem] emitting selectFile for file:', props.path)
     emit('selectFile', props.path)
   }
 }
@@ -155,7 +141,6 @@ const indentStyle = computed(() => ({
       v-else
       @mousedown="handleMiddleClick"
       @click.stop="handleClick"
-      @click.capture="() => console.log('[FileTreeItem] capture phase click on', props.path)"
       @contextmenu.prevent.stop="handleContextMenu"
       @touchstart="onTouchStart"
       @touchend="onTouchEnd"

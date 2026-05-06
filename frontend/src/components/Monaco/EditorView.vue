@@ -1,15 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import MonacoEditor from './MonacoEditor.vue'
-import EditorHistoryDropdown, { type HistoryEntry } from './EditorHistoryDropdown.vue'
-
-/**
- * View type for the editor
- * - main: Primary editor view (editable)
- * - preview1: First preview pane (read-only)
- * - preview2: Second preview pane (read-only)
- */
-export type ViewType = 'main' | 'preview1' | 'preview2'
+import EditorHistoryDropdown from './EditorHistoryDropdown.vue'
+import { type HistoryEntry, type ViewType } from '@/types/editor'
 
 interface Props {
   viewType: ViewType

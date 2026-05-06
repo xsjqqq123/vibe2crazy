@@ -33,6 +33,7 @@ import EditorView from '@/components/Monaco/EditorView.vue'
 import CommitsList from '@/components/CommitsList.vue'
 import CommitDiffView from '@/components/CommitDiffView.vue'
 import Pagination from '@/components/Pagination.vue'
+import { type HistoryEntry, type EditorViewState } from '@/types/editor'
 
 
 interface Layout {
@@ -41,24 +42,6 @@ interface Layout {
   tabbedPane: number     // Changes/Commits middle pane
   tasksPane: number      // Task list at bottom
   terminalPx: number     // Terminal width in pixels (not percentage)
-}
-
-interface HistoryEntry {
-  filePath: string
-  cursorPosition: { line: number; column: number }
-  scrollPosition: { top: number; left: number }
-  timestamp: number
-}
-
-interface EditorViewState {
-  filePath: string | null
-  fileContent: string
-  originalContent: string  // For main editor diff mode only
-  editorMode: 'editor' | 'diff' | 'commit-diff' | 'deleted' | 'conflict'  // Only used by main editor
-  history: HistoryEntry[]
-  cursorPosition: { line: number; column: number } | null
-  scrollPosition: { top: number; left: number } | null
-  isFileDeleted: boolean  // Only used by main editor
 }
 
 const router = useRouter()
@@ -177,9 +160,6 @@ const currentPreviewState = computed(() => {
   if (activeView.value === 'preview2') return preview2State.value
   return null
 })
-const hasPreviewContent = computed(() => {
-  return preview1State.value.filePath !== null || preview2State.value.filePath !== null
-})
 const hasMainEditorContent = computed(() => {
   return mainEditorState.value.filePath !== null
 })
@@ -193,11 +173,16 @@ watch(showPreviews, (show) => {
   // When previews are hidden, reset preview states
   if (!show) {
     previewCycle.value = 'preview1'
-    // Clear preview content when hiding (uses computed to check)
-    if (hasPreviewContent.value) {
-      preview1State.value.filePath = null
-      preview2State.value.filePath = null
+    // Save preview positions before clearing (if file was open)
+    if (preview1State.value.filePath && preview1Ref.value) {
+      updatePreviewHistoryEntry(preview1State.value, preview1Ref.value)
     }
+    if (preview2State.value.filePath && preview2Ref.value) {
+      updatePreviewHistoryEntry(preview2State.value, preview2Ref.value)
+    }
+    // Clear preview content when hiding
+    preview1State.value.filePath = null
+    preview2State.value.filePath = null
   }
 })
 
