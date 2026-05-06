@@ -44,6 +44,12 @@ const viewLabel = computed(() => {
 
 const currentFile = computed(() => props.filePath)
 
+// Local content with getter/setter for v-model (props cannot be mutated directly)
+const localContent = computed({
+  get: () => props.content,
+  set: (val) => emit('update:content', val)
+})
+
 // Methods
 const handleHistorySelect = (entry: HistoryEntry) => {
   emit('history-select', entry)
@@ -140,7 +146,7 @@ defineExpose({
     <div class="editor-container flex-1 min-h-0">
       <MonacoEditor
         ref="editorRef"
-        v-model="content"
+        v-model="localContent"
         :file-path="filePath"
         :read-only="isPreview"
         @cursor-change="handleCursorChange"

@@ -29,6 +29,7 @@ import { closePersistentConnection } from '@/composables/useWebSocket'
 import MonacoEditor from '@/components/Monaco/MonacoEditor.vue'
 import MonacoDiffEditor from '@/components/Monaco/MonacoDiffEditor.vue'
 import Terminal from '@/components/Terminal/Terminal.vue'
+import EditorView from '@/components/Monaco/EditorView.vue'
 import CommitsList from '@/components/CommitsList.vue'
 import CommitDiffView from '@/components/CommitDiffView.vue'
 import Pagination from '@/components/Pagination.vue'
@@ -210,9 +211,9 @@ watch(activeView, (view) => {
 
 // Watch currentFile to save/restore position using mainEditorState
 watch(currentFile, (newFile, oldFile) => {
-  // Save position for previous file
+  // Save position for previous file (update existing history entry)
   if (oldFile && mainEditorState.value.filePath === oldFile) {
-    saveEditorPosition(mainEditorState.value)
+    updateHistoryEntry(mainEditorState.value)
   }
   // Update mainEditorState to track current file
   if (newFile) {
@@ -221,6 +222,9 @@ watch(currentFile, (newFile, oldFile) => {
     const historyEntry = mainEditorState.value.history.find(h => h.filePath === newFile)
     if (historyEntry) {
       restoreEditorPosition(mainEditorState.value, historyEntry)
+    } else {
+      // New file not in history - add entry with default position
+      addHistoryEntry(mainEditorState.value, newFile)
     }
   }
 })
@@ -314,26 +318,8 @@ const previewCollapsed = ref(localStorage.getItem('v2c-preview-collapsed') === '
 const editorRef = ref<InstanceType<typeof MonacoEditor> | null>(null)
 const outlineRef = ref<InstanceType<typeof SymbolOutline> | null>(null)
 
-// Position saving/restoring functions for editor state
-const saveEditorPosition = (viewState: EditorViewState) => {
-  if (!viewState.filePath || !editorRef.value) return
-
-  const position = editorRef.value.getPosition()
-  if (!position) return
-
-  const scrollTop = editorRef.value.getScrollTop()
-  const scrollLeft = editorRef.value.getScrollLeft()
-
-  // Update history entry for current file
-  const historyEntry = viewState.history.find(h => h.filePath === viewState.filePath)
-  if (historyEntry) {
-    historyEntry.cursorPosition = { line: position.lineNumber, column: position.column }
-    historyEntry.scrollPosition = { top: scrollTop, left: scrollLeft }
-  }
-}
-
 const restoreEditorPosition = (viewState: EditorViewState, entry: HistoryEntry) => {
-  // viewState is passed for consistency with saveEditorPosition but entry contains the actual position data
+  // entry contains the actual position data to restore
   setTimeout(() => {
     if (!editorRef.value || !viewState.filePath) return
 
@@ -352,6 +338,63 @@ const restoreEditorPosition = (viewState: EditorViewState, entry: HistoryEntry) 
     // Reveal line in center
     editorRef.value.revealLineInCenter(entry.cursorPosition.line)
   }, 100)
+}
+
+/**
+ * Add a new history entry for a file
+ * Called when a file is opened for the first time
+ * Enforces 50-file limit by removing oldest entry
+ */
+const addHistoryEntry = (viewState: EditorViewState, filePath: string) => {
+  // Check if entry already exists
+  const existingEntry = viewState.history.find(h => h.filePath === filePath)
+  if (existingEntry) {
+    // Entry exists, update timestamp to mark as recently accessed
+    existingEntry.timestamp = Date.now()
+    return
+  }
+
+  // Create new entry with default position
+  const newEntry: HistoryEntry = {
+    filePath,
+    cursorPosition: { line: 1, column: 1 },
+    scrollPosition: { top: 0, left: 0 },
+    timestamp: Date.now()
+  }
+
+  // Add to history
+  viewState.history.push(newEntry)
+
+  // Enforce 50-file limit: remove oldest entries if exceeding
+  while (viewState.history.length > 50) {
+    // Find and remove the entry with the oldest timestamp
+    const oldestIndex = viewState.history.reduce((minIdx, entry, idx, arr) =>
+      entry.timestamp < arr[minIdx].timestamp ? idx : minIdx, 0)
+    viewState.history.splice(oldestIndex, 1)
+  }
+}
+
+/**
+ * Update existing history entry with current position
+ * Called when switching away from a file
+ */
+const updateHistoryEntry = (viewState: EditorViewState) => {
+  if (!viewState.filePath || !editorRef.value) return
+
+  const position = editorRef.value.getPosition()
+  if (!position) return
+
+  const scrollTop = editorRef.value.getScrollTop()
+  const scrollLeft = editorRef.value.getScrollLeft()
+
+  // Update history entry for current file
+  const historyEntry = viewState.history.find(h => h.filePath === viewState.filePath)
+  if (historyEntry) {
+    historyEntry.cursorPosition = { line: position.lineNumber, column: position.column }
+    historyEntry.scrollPosition = { top: scrollTop, left: scrollLeft }
+    // Update timestamp to mark as recently accessed
+    historyEntry.timestamp = Date.now()
+  }
 }
 
 // Settings modal
@@ -491,6 +534,27 @@ const terminalPercent = computed(() => {
   })
   return result
 })
+
+// Computed properties for preview layout (70% main, 30% previews)
+const mainEditorPercent = computed(() => {
+  // When previews shown on desktop: 70% main editor
+  // When previews hidden or on mobile: calculate based on terminal visibility
+  if (isMobile.value) return 100
+  if (showPreviews.value) return 70
+  return showTerminal.value ? (100 - terminalPercent.value) : 100
+})
+
+const previewPercent = computed(() => {
+  // When previews shown on desktop: 30% for preview area
+  // When previews hidden or on mobile: 0%
+  if (isMobile.value) return 0
+  if (showPreviews.value) return 30
+  return 0
+})
+
+// Nested preview split: Preview2 (top) 50%, Preview1 (bottom) 50%
+const preview2Percent = 50
+const preview1Percent = 50
 
 // Splitpanes refs for programmatic control
 const mainSplitpanesRef = ref<any>(null)
@@ -2450,7 +2514,7 @@ onUnmounted(() => {
             :size="(isMobile && showFileList) ? 0 : (isMobile ? 100 : (100 - layout.sidebar))"
             :min-size="(isMobile && showFileList) ? 0 : 20">
         <splitpanes ref="editorSplitpanesRef" vertical class="default-theme h-full min-h-0" @resize="handleEditorResize">
-          <pane :size="isMobile && showTerminal ? 0 : (showTerminal ? (100 - terminalPercent) : 100)" :min-size="isMobile && showTerminal ? 0 : (showTerminal ? 10 : 20)" class="flex flex-col min-h-0">
+          <pane :size="mainEditorPercent" :min-size="10" class="flex flex-col min-h-0">
             <!-- Editor area -->
             <main class="flex-1 flex flex-col overflow-hidden bg-main">
               <!-- Editor header -->
@@ -2728,10 +2792,38 @@ onUnmounted(() => {
           </pane>
 
           <!-- Terminal pane - always rendered to keep WebSocket alive, size=0 when hidden -->
-          <pane v-if="!showFileList" :size="showTerminal ? (isMobile ? 100 : terminalPercent) : 0" :min-size="showTerminal ? (isMobile ? 100 : 10) : 0" class="flex flex-col min-h-0">
+          <pane v-if="!showFileList && !showPreviews" :size="showTerminal ? (isMobile ? 100 : terminalPercent) : 0" :min-size="showTerminal ? (isMobile ? 100 : 10) : 0" class="flex flex-col min-h-0">
             <div class="w-full bg-main border-l border-main flex-1 flex flex-col min-h-0">
               <Terminal :key="taskId" :task-id="taskId" />
             </div>
+          </pane>
+
+          <!-- Preview area - shows when showPreviews=true, replaces terminal -->
+          <pane v-if="!showFileList && showPreviews && !isMobile" :size="previewPercent" :min-size="10" class="flex flex-col min-h-0">
+            <splitpanes horizontal class="default-theme h-full min-h-0">
+              <!-- Preview2 (top) -->
+              <pane :size="preview2Percent" :min-size="10" class="flex flex-col min-h-0 bg-main border-l border-main">
+                <div class="flex-1 min-h-0 overflow-hidden">
+                  <EditorView
+                    viewType="preview2"
+                    :filePath="preview2State.filePath"
+                    :content="preview2State.fileContent"
+                    :history="preview2State.history"
+                  />
+                </div>
+              </pane>
+              <!-- Preview1 (bottom) -->
+              <pane :size="preview1Percent" :min-size="10" class="flex flex-col min-h-0 bg-main border-l border-main">
+                <div class="flex-1 min-h-0 overflow-hidden">
+                  <EditorView
+                    viewType="preview1"
+                    :filePath="preview1State.filePath"
+                    :content="preview1State.fileContent"
+                    :history="preview1State.history"
+                  />
+                </div>
+              </pane>
+            </splitpanes>
           </pane>
         </splitpanes>
       </pane>
