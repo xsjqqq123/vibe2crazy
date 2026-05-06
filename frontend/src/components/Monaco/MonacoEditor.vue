@@ -9,6 +9,7 @@ interface Props {
   language?: string
   readOnly?: boolean
   path?: string
+  filePath?: string | null
   enableSaveShortcut?: boolean
   isMobile?: boolean
 }
@@ -20,6 +21,7 @@ interface Emits {
   (e: 'content-change'): void
   (e: 'cursor-word', word: string, position: { lineNumber: number; column: number }): void
   (e: 'find-references', selectedText: string): void
+  (e: 'cursor-change', position: { lineNumber: number; column: number }): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -27,6 +29,7 @@ const props = withDefaults(defineProps<Props>(), {
   language: 'plaintext',
   readOnly: false,
   path: '',
+  filePath: null,
   enableSaveShortcut: false,
   isMobile: false
 })
@@ -38,7 +41,10 @@ const containerRef = ref<HTMLElement | null>(null)
 let editor: any = null
 let focusInterceptor: ((e: Event) => void) | null = null
 
-const currentLanguage = computed(() => props.path ? detectLanguage(props.path) : props.language)
+const currentLanguage = computed(() => {
+  const path = props.path || props.filePath
+  return path ? detectLanguage(path) : props.language
+})
 
 // Theme mapping
 const getMonacoTheme = (theme: ThemeName): string => {
@@ -112,7 +118,8 @@ onMounted(async () => {
   })
 
   // Add markdown preview action for .md files
-  const isMarkdownFile = props.path?.toLowerCase().endsWith('.md')
+  const filePath = props.path || props.filePath
+  const isMarkdownFile = filePath?.toLowerCase().endsWith('.md')
   if (isMarkdownFile) {
     editor.addAction({
       id: 'preview-markdown',
@@ -156,6 +163,16 @@ onMounted(async () => {
     if (editor) {
       emit('update:modelValue', editor.getValue())
       emit('content-change')
+    }
+  })
+
+  // Listen for cursor position changes
+  editor.onDidChangeCursorPosition((e: any) => {
+    if (editor) {
+      emit('cursor-change', {
+        lineNumber: e.position.lineNumber,
+        column: e.position.column
+      })
     }
   })
 
