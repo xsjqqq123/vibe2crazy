@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, onUnmounted, watch, nextTick, provide } from 'vue'
+import { ref, onMounted, computed, onUnmounted, watch, nextTick, provide, type Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 import { useConfirm } from '@/composables/useConfirm'
@@ -186,6 +186,10 @@ const hasMainEditorContent = computed(() => {
 
 // Watch for preview toggle changes (will sync with terminal visibility in subsequent tasks)
 watch(showPreviews, (show) => {
+  // Mutual exclusivity: hide terminal when previews are shown
+  if (show && !isMobile.value) {
+    showTerminal.value = false
+  }
   // When previews are hidden, reset preview states
   if (!show) {
     previewCycle.value = 'preview1'
@@ -317,6 +321,8 @@ const outlineCollapsed = ref(localStorage.getItem('v2c-outline-collapsed') === '
 const previewCollapsed = ref(localStorage.getItem('v2c-preview-collapsed') === 'true')
 const editorRef = ref<InstanceType<typeof MonacoEditor> | null>(null)
 const outlineRef = ref<InstanceType<typeof SymbolOutline> | null>(null)
+const preview1Ref = ref<InstanceType<typeof EditorView> | null>(null)
+const preview2Ref = ref<InstanceType<typeof EditorView> | null>(null)
 
 const restoreEditorPosition = (viewState: EditorViewState, entry: HistoryEntry) => {
   // entry contains the actual position data to restore
@@ -522,6 +528,8 @@ const editorContainerWidth = ref(0)
 
 // Calculate terminal percentage from pixel width
 const terminalPercent = computed(() => {
+  // Hide terminal when previews are shown (mutual exclusivity)
+  if (showPreviews.value) return 0
   if (!showTerminal.value || editorContainerWidth.value <= 0) return 0
   const percent = (layout.value.terminalPx / editorContainerWidth.value) * 100
   // Clamp between 10% and 90%
@@ -2171,11 +2179,25 @@ onMounted(async () => {
   console.log('[Layout Debug] onMounted completed')
 })
 
-// Global keyboard handler for Ctrl+P and Ctrl+S
+// Global keyboard handler for Ctrl+P, Ctrl+S, and Alt+Left/Right for history navigation
 const handleGlobalKeydown = (e: KeyboardEvent) => {
+  // Alt+Left/Right for history navigation
+  if (e.altKey && e.key === 'ArrowLeft') {
+    e.preventDefault()
+    navigateHistory('backward')
+    return
+  }
+  if (e.altKey && e.key === 'ArrowRight') {
+    e.preventDefault()
+    navigateHistory('forward')
+    return
+  }
+
+  // Ctrl+P for quick jump
   if (e.ctrlKey && e.key === 'p') {
     e.preventDefault()
     showFileQuickJump.value = true
+    return
   }
   // Ctrl+S for conflict mode save
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -2183,6 +2205,84 @@ const handleGlobalKeydown = (e: KeyboardEvent) => {
       e.preventDefault()
       saveConflictFile()
     }
+  }
+}
+
+/**
+ * Get the view state for the currently active view
+ * Returns the appropriate EditorViewState based on activeView
+ */
+const getActiveViewState = (): Ref<EditorViewState> => {
+  if (activeView.value === 'preview1') return preview1State
+  if (activeView.value === 'preview2') return preview2State
+  return mainEditorState
+}
+
+/**
+ * Navigate through file history in the active view
+ * @param direction 'backward' or 'forward'
+ */
+const navigateHistory = (direction: 'backward' | 'forward') => {
+  const viewState = getActiveViewState()
+
+  // Need at least one file in history to navigate
+  if (!viewState.value.filePath || viewState.value.history.length === 0) {
+    return
+  }
+
+  // Find current index in history
+  const currentIndex = viewState.value.history.findIndex(h => h.filePath === viewState.value.filePath)
+
+  // If current file not in history, cannot navigate
+  if (currentIndex === -1) {
+    return
+  }
+
+  // Calculate target index with wrap-around
+  let targetIndex: number
+  if (direction === 'backward') {
+    targetIndex = currentIndex > 0 ? currentIndex - 1 : viewState.value.history.length - 1
+  } else {
+    targetIndex = currentIndex < viewState.value.history.length - 1 ? currentIndex + 1 : 0
+  }
+
+  // Get the target entry and load it
+  const entry = viewState.value.history[targetIndex]
+  if (entry) {
+    loadFileInView(entry.filePath, viewState, entry)
+  }
+}
+
+/**
+ * Load a file in the specified view and restore position
+ * @param filePath The file path to load
+ * @param viewState The view state to update
+ * @param entry The history entry with position to restore
+ */
+const loadFileInView = async (filePath: string, viewState: Ref<EditorViewState>, entry: HistoryEntry) => {
+  // For main view, use the existing loadFile function
+  if (activeView.value === 'main') {
+    await loadFile(filePath, 'editor')
+    // Position will be restored by the watch on currentFile
+    return
+  }
+
+  // For preview views, load file content directly into the preview state
+  try {
+    const result = await filesApi.read(taskId.value, filePath)
+    viewState.value.filePath = filePath
+    viewState.value.fileContent = result.content
+    viewState.value.originalContent = result.content
+
+    // Add to history if not already present
+    addHistoryEntry(viewState.value, filePath)
+
+    // Restore position after content is loaded (EditorView will handle this via its restorePosition method)
+    // The position data is stored in the entry, and EditorView's history-select event will restore it
+    viewState.value.cursorPosition = entry.cursorPosition
+    viewState.value.scrollPosition = entry.scrollPosition
+  } catch (err: any) {
+    console.error('Failed to load file in preview:', err.message)
   }
 }
 
