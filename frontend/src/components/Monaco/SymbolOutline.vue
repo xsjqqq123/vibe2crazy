@@ -4,11 +4,13 @@ import { ref, watch, computed, onUnmounted } from 'vue'
 import type { SymbolInfo } from '@/composables/useSymbolOutline'
 import { symbolsApi, type IndexResponse, type SymbolDefinitionResponse, type SymbolMatchItem } from '@/api/symbols'
 import { isLanMode } from '@/api/client'
+import PreviewToggle from './PreviewToggle.vue'
 
 interface Props {
   symbols: SymbolInfo[]
   collapsed: boolean
   previewCollapsed: boolean
+  showPreviews?: boolean  // Multi-view preview panes toggle
   taskId?: string
   currentFilePath?: string
 }
@@ -17,6 +19,7 @@ interface Emits {
   (e: 'select', symbol: SymbolInfo): void
   (e: 'toggle'): void
   (e: 'previewToggle'): void
+  (e: 'togglePreviewPanes'): void  // Toggle multi-view preview panes
   (e: 'navigate', filePath: string, lineNumber: number): void
 }
 
@@ -258,6 +261,12 @@ defineExpose({
         >
           ↓
         </button>
+        <!-- Preview panes toggle button -->
+        <PreviewToggle
+          v-if="showPreviews !== undefined"
+          :showPreviews="showPreviews"
+          @toggle="emit('togglePreviewPanes')"
+        />
       </div>
 
       <!-- Content -->

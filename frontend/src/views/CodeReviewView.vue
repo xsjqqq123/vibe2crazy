@@ -403,6 +403,103 @@ const updateHistoryEntry = (viewState: EditorViewState) => {
   }
 }
 
+/**
+ * Update existing preview history entry with current position
+ * Uses EditorView's savePosition method for preview panes
+ */
+const updatePreviewHistoryEntry = (viewState: EditorViewState, previewRef: InstanceType<typeof EditorView> | null) => {
+  if (!viewState.filePath || !previewRef) return
+
+  const savedPos = previewRef.savePosition()
+  if (!savedPos.cursorPosition) return
+
+  // Update history entry for current file
+  const historyEntry = viewState.history.find(h => h.filePath === viewState.filePath)
+  if (historyEntry) {
+    // Convert lineNumber to line (EditorView uses lineNumber, HistoryEntry uses line)
+    historyEntry.cursorPosition = {
+      line: savedPos.cursorPosition.lineNumber,
+      column: savedPos.cursorPosition.column
+    }
+    historyEntry.scrollPosition = savedPos.scrollPosition || { top: 0, left: 0 }
+    // Update timestamp to mark as recently accessed
+    historyEntry.timestamp = Date.now()
+  }
+}
+
+/**
+ * Handle file preview opening via middle-click
+ * Cycles between preview1 and preview2 panes
+ */
+const handleFilePreview = async (filePath: string) => {
+  // Determine which preview to use based on cycle
+  const currentPreviewKey = previewCycle.value
+  const nextPreviewKey: 'preview1' | 'preview2' = currentPreviewKey === 'preview1' ? 'preview2' : 'preview1'
+
+  // Get the current preview state and ref for position saving
+  const currentPreviewState = currentPreviewKey === 'preview1' ? preview1State : preview2State
+  const currentPreviewRef = currentPreviewKey === 'preview1' ? preview1Ref.value : preview2Ref.value
+
+  // Save current preview's position before switching (if file was open)
+  if (currentPreviewState.value.filePath) {
+    updatePreviewHistoryEntry(currentPreviewState.value, currentPreviewRef)
+  }
+
+  // Show preview windows (hide terminal on desktop)
+  showPreviews.value = true
+  if (!isMobile.value) {
+    showTerminal.value = false
+  }
+
+  // Load file content using FileCacheService (similar to loadFile)
+  const targetState = currentPreviewKey === 'preview1' ? preview1State : preview2State
+
+  try {
+    // Step 1: Get hash from server
+    const hashResult = await filesApi.getHash(taskId.value, filePath)
+    const serverHash = hashResult.hash
+
+    // Step 2: Check local cache
+    const cached = FileCacheService.get(taskId.value, filePath)
+
+    if (cached && cached.hash === serverHash) {
+      // Cache hit - use cached content
+      targetState.value.fileContent = cached.content
+    } else {
+      // Cache miss or stale - fetch from server
+      const result = await filesApi.read(taskId.value, filePath)
+      targetState.value.fileContent = result.content
+
+      // Update cache if we have a hash
+      if (result.hash) {
+        FileCacheService.set(taskId.value, filePath, result.hash, result.content)
+      }
+    }
+
+    // Update preview state
+    targetState.value.filePath = filePath
+    targetState.value.editorMode = 'editor'  // Previews are always in editor mode (read-only)
+
+    // Add entry to preview history
+    addHistoryEntry(targetState.value, filePath)
+
+    // Find and restore position from history if available
+    const historyEntry = targetState.value.history.find(h => h.filePath === filePath)
+    if (historyEntry && (currentPreviewKey === 'preview1' ? preview1Ref.value : preview2Ref.value)) {
+      // Restore position after content loads (EditorView handles this via props)
+      // Position restoration happens when EditorView receives new history
+    }
+  } catch (err: any) {
+    console.error('Failed to load file for preview:', err.message)
+    // On error, still show preview with empty content
+    targetState.value.filePath = filePath
+    targetState.value.fileContent = ''
+  }
+
+  // Toggle previewCycle for next click
+  previewCycle.value = nextPreviewKey
+}
+
 // Settings modal
 const showSettingsModal = ref(false)
 
@@ -786,8 +883,12 @@ watch(showMergeDialog, (isOpen) => {
 })
 
 watch(showTerminal, (isShown) => {
-  if (isShown && layout.value.terminalPx === 0) {
-    layout.value.terminalPx = 600  // Default terminal width in pixels
+  // Mutual exclusivity: hide previews when terminal is shown
+  if (isShown) {
+    showPreviews.value = false
+    if (layout.value.terminalPx === 0) {
+      layout.value.terminalPx = 600  // Default terminal width in pixels
+    }
   }
 })
 
@@ -1302,6 +1403,12 @@ function handlePreviewToggle() {
     outlineCollapsed.value = true
     localStorage.setItem('v2c-outline-collapsed', 'true')
   }
+}
+
+// Toggle multi-view preview panes (mutual exclusivity with terminal)
+function handleTogglePreviewPanes() {
+  if (isMobile.value) return  // Don't show previews on mobile
+  showPreviews.value = !showPreviews.value
 }
 
 function handleContentChange() {
@@ -2819,12 +2926,14 @@ onUnmounted(() => {
                     :symbols="symbols"
                     :collapsed="outlineCollapsed"
                     :preview-collapsed="previewCollapsed"
+                    :show-previews="showPreviews && !isMobile"
                     :task-id="taskId"
                     :current-file-path="currentFile || ''"
                     class="flex-shrink-0"
                     @select="handleSymbolSelect"
                     @toggle="handleOutlineToggle"
                     @preview-toggle="handlePreviewToggle"
+                    @toggle-preview-panes="handleTogglePreviewPanes"
                     @navigate="handleSymbolNavigate"
                   />
                 </div>
@@ -2850,12 +2959,14 @@ onUnmounted(() => {
                     :symbols="symbols"
                     :collapsed="outlineCollapsed"
                     :preview-collapsed="previewCollapsed"
+                    :show-previews="showPreviews && !isMobile"
                     :task-id="taskId"
                     :current-file-path="currentFile || ''"
                     class="flex-shrink-0"
                     @select="handleSymbolSelect"
                     @toggle="handleOutlineToggle"
                     @preview-toggle="handlePreviewToggle"
+                    @toggle-preview-panes="handleTogglePreviewPanes"
                     @navigate="handleSymbolNavigate"
                   />
                 </div>
@@ -2905,6 +3016,7 @@ onUnmounted(() => {
               <pane :size="preview2Percent" :min-size="10" class="flex flex-col min-h-0 bg-main border-l border-main">
                 <div class="flex-1 min-h-0 overflow-hidden">
                   <EditorView
+                    ref="preview2Ref"
                     viewType="preview2"
                     :filePath="preview2State.filePath"
                     :content="preview2State.fileContent"
@@ -2916,6 +3028,7 @@ onUnmounted(() => {
               <pane :size="preview1Percent" :min-size="10" class="flex flex-col min-h-0 bg-main border-l border-main">
                 <div class="flex-1 min-h-0 overflow-hidden">
                   <EditorView
+                    ref="preview1Ref"
                     viewType="preview1"
                     :filePath="preview1State.filePath"
                     :content="preview1State.fileContent"
