@@ -3,21 +3,18 @@ import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
 // CDN package mapping: package name -> CDN URL
+// IMPORTANT: Vue and its ecosystem libraries must NOT be externalized to CDN.
+// The vue.esm-browser.prod.js CDN version is incompatible with Vite-bundled Vue components
+// (like @guolao/vue-monaco-editor), causing DOM insertion errors (insertBefore null).
+// Vue must be bundled by Vite to ensure proper reactivity and DOM lifecycle handling.
 const CDN_PACKAGES: Record<string, string> = {
-  // vue-vendor (104KB)
-  'vue': 'https://cdn.jsdelivr.net/npm/vue@3.4.0/dist/vue.esm-browser.prod.js',
-  'vue-router': 'https://cdn.jsdelivr.net/npm/vue-router@4.2.0/dist/vue-router.esm-browser.js',
-  'pinia': 'https://cdn.jsdelivr.net/npm/pinia@2.1.0/dist/pinia.mjs',
-  // vue ecosystem deps (transitive)
-  'vue-demi': 'https://cdn.jsdelivr.net/npm/vue-demi@0.14.10/lib/index.mjs',
-  '@vue/devtools-api': 'https://cdn.jsdelivr.net/npm/@vue/devtools-api@6.6.1/lib/esm/index.js',
-  // xterm (331KB)
+  // xterm (331KB) - Terminal rendering library, safe to externalize
   '@xterm/xterm': 'https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/+esm',
   '@xterm/addon-fit': 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/+esm',
   '@xterm/addon-webgl': 'https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/+esm',
-  // highlight.js (928KB)
+  // highlight.js (928KB) - Syntax highlighting, safe to externalize
   'highlight.js': 'https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/+esm',
-  // markdown (133KB)
+  // markdown (133KB) - Markdown parsing, safe to externalize
   'markdown-it': 'https://cdn.jsdelivr.net/npm/markdown-it@14.1.1/+esm',
   'marked': 'https://cdn.jsdelivr.net/npm/marked@17.0.5/+esm',
 }
