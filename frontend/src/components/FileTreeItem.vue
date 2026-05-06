@@ -13,6 +13,7 @@ const emit = defineEmits<{
   toggle: [path: string]
   selectFile: [path: string]
   showContextMenu: [event: { x: number; y: number; path: string; type: string }]
+  previewFile: [path: string]
 }>()
 
 const { nodes, expandedDirs } = injectFileTree()
@@ -59,6 +60,13 @@ const handleContextMenu = (e: MouseEvent) => {
     path: props.path,
     type: node.value.type
   })
+}
+
+const handleMiddleClick = (e: MouseEvent) => {
+  if (e.button === 1 && node.value?.type === 'file') {
+    e.preventDefault()
+    emit('previewFile', props.path)
+  }
 }
 
 let touchTimer: ReturnType<typeof setTimeout> | null = null
@@ -145,6 +153,7 @@ const indentStyle = computed(() => ({
     <!-- File Node -->
     <div
       v-else
+      @mousedown="handleMiddleClick"
       @click.stop="handleClick"
       @click.capture="() => console.log('[FileTreeItem] capture phase click on', props.path)"
       @contextmenu.prevent.stop="handleContextMenu"
@@ -182,6 +191,7 @@ const indentStyle = computed(() => ({
         @toggle="$emit('toggle', $event)"
         @select-file="$emit('selectFile', $event)"
         @show-context-menu="$emit('showContextMenu', $event)"
+        @preview-file="$emit('previewFile', $event)"
       />
     </template>
   </div>

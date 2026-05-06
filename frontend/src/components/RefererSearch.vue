@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectFile: [filePath: string, lineNumber: number]
+  previewFile: [filePath: string, lineNumber: number]
   'update:query': [value: string]
   'update:results': [value: SearchMatch[]]
   'update:total': [value: number]
@@ -147,6 +148,21 @@ const handleResultClick = (match: SearchMatch) => {
     filePath = filePath.slice(props.worktreePath.length).replace(/^\//, '')
   }
   emit('selectFile', filePath, match.line)
+}
+
+const handleMiddleClick = (e: MouseEvent, match: SearchMatch) => {
+  // Only handle middle-click (button === 1)
+  if (e.button !== 1) return
+
+  // Prevent default browser behavior
+  e.preventDefault()
+
+  // Convert absolute path to relative path
+  let filePath = match.file
+  if (props.worktreePath && filePath.startsWith(props.worktreePath)) {
+    filePath = filePath.slice(props.worktreePath.length).replace(/^\//, '')
+  }
+  emit('previewFile', filePath, match.line)
 }
 
 const prevPage = () => {
@@ -283,6 +299,7 @@ const highlightMatch = (content: string) => {
               :key="`${match.file}:${match.line}`"
               class="match-item px-3 py-1 text-xs cursor-pointer hover:bg-sub transition-colors"
               @click="handleResultClick(match)"
+              @mousedown="handleMiddleClick($event, match)"
             >
               <span class="text-sub w-6 inline-block text-right mr-2">{{ match.line }}</span>
               <span class="font-mono" v-html="highlightMatch(match.content)"></span>

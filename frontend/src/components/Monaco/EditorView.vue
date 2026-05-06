@@ -122,10 +122,26 @@ const getModel = () => {
   return editorRef.value?.getModel() || null
 }
 
+/**
+ * Jump to a specific line number
+ * Used for preview files from search results
+ */
+const goToLine = (lineNumber: number) => {
+  if (!editorRef.value) {
+    return
+  }
+
+  // Use setTimeout to ensure the editor is ready
+  setTimeout(() => {
+    editorRef.value!.goToLine(lineNumber)
+  }, 100)
+}
+
 // Expose methods for parent components
 defineExpose({
   savePosition,
   restorePosition,
+  goToLine,
   getModel
 })
 </script>

@@ -500,6 +500,81 @@ const handleFilePreview = async (filePath: string) => {
   previewCycle.value = nextPreviewKey
 }
 
+/**
+ * Handle file preview with line number (from RefererSearch middle-click)
+ * Opens file in preview and jumps to the specified line
+ */
+const handleFilePreviewWithLine = async (filePath: string, lineNumber: number) => {
+  // Determine which preview to use based on cycle
+  const currentPreviewKey = previewCycle.value
+  const nextPreviewKey: 'preview1' | 'preview2' = currentPreviewKey === 'preview1' ? 'preview2' : 'preview1'
+
+  // Get the current preview state and ref for position saving
+  const currentPreviewState = currentPreviewKey === 'preview1' ? preview1State : preview2State
+  const currentPreviewRef = currentPreviewKey === 'preview1' ? preview1Ref.value : preview2Ref.value
+
+  // Save current preview's position before switching (if file was open)
+  if (currentPreviewState.value.filePath) {
+    updatePreviewHistoryEntry(currentPreviewState.value, currentPreviewRef)
+  }
+
+  // Show preview windows (hide terminal on desktop)
+  showPreviews.value = true
+  if (!isMobile.value) {
+    showTerminal.value = false
+  }
+
+  // Load file content using FileCacheService
+  const targetState = currentPreviewKey === 'preview1' ? preview1State : preview2State
+  const targetRef = currentPreviewKey === 'preview1' ? preview1Ref.value : preview2Ref.value
+
+  try {
+    // Step 1: Get hash from server
+    const hashResult = await filesApi.getHash(taskId.value, filePath)
+    const serverHash = hashResult.hash
+
+    // Step 2: Check local cache
+    const cached = FileCacheService.get(taskId.value, filePath)
+
+    if (cached && cached.hash === serverHash) {
+      // Cache hit - use cached content
+      targetState.value.fileContent = cached.content
+    } else {
+      // Cache miss or stale - fetch from server
+      const result = await filesApi.read(taskId.value, filePath)
+      targetState.value.fileContent = result.content
+
+      // Update cache if we have a hash
+      if (result.hash) {
+        FileCacheService.set(taskId.value, filePath, result.hash, result.content)
+      }
+    }
+
+    // Update preview state
+    targetState.value.filePath = filePath
+    targetState.value.editorMode = 'editor'  // Previews are always in editor mode (read-only)
+
+    // Add entry to preview history
+    addHistoryEntry(targetState.value, filePath)
+
+    // Jump to line after content loads
+    // Wait for EditorView to render, then call goToLine
+    setTimeout(() => {
+      if (targetRef) {
+        targetRef.goToLine(lineNumber)
+      }
+    }, 150)
+  } catch (err: any) {
+    console.error('Failed to load file for preview:', err.message)
+    // On error, still show preview with empty content
+    targetState.value.filePath = filePath
+    targetState.value.fileContent = ''
+  }
+
+  // Toggle previewCycle for next click
+  previewCycle.value = nextPreviewKey
+}
+
 // Settings modal
 const showSettingsModal = ref(false)
 
@@ -2384,10 +2459,25 @@ const loadFileInView = async (filePath: string, viewState: Ref<EditorViewState>,
     // Add to history if not already present
     addHistoryEntry(viewState.value, filePath)
 
-    // Restore position after content is loaded (EditorView will handle this via its restorePosition method)
-    // The position data is stored in the entry, and EditorView's history-select event will restore it
+    // Set the position data in viewState
     viewState.value.cursorPosition = entry.cursorPosition
     viewState.value.scrollPosition = entry.scrollPosition
+
+    // Wait for EditorView to load the content, then restore position
+    await nextTick()
+    // Determine which preview ref to use based on viewState
+    const previewRef = viewState === preview1State ? preview1Ref.value :
+                       viewState === preview2State ? preview2Ref.value : null
+    if (previewRef && viewState.value.cursorPosition) {
+      // Convert 'line' to 'lineNumber' for EditorView.restorePosition
+      previewRef.restorePosition({
+        cursorPosition: {
+          lineNumber: viewState.value.cursorPosition.line,
+          column: viewState.value.cursorPosition.column
+        },
+        scrollPosition: viewState.value.scrollPosition
+      })
+    }
   } catch (err: any) {
     console.error('Failed to load file in preview:', err.message)
   }
@@ -2525,6 +2615,7 @@ onUnmounted(() => {
                     :level="0"
                     @toggle="toggleDir"
                     @select-file="loadFile"
+                    @preview-file="handleFilePreview"
                     @show-context-menu="handleShowContextMenu"
                   />
                   <div v-if="rootPaths.length === 0" class="text-xs text-sub py-2">No files found (rootPaths empty)</div>
@@ -2547,6 +2638,7 @@ onUnmounted(() => {
                     @update:page="refererPage = $event"
                     @update:expanded-files="refererExpandedFiles = $event"
                     @select-file="handleSearchSelect"
+                    @preview-file="handleFilePreviewWithLine"
                   />
                 </div>
               </div>
