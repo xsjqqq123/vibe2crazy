@@ -6,8 +6,8 @@ import { ref, computed } from 'vue'
  */
 export interface HistoryEntry {
   filePath: string
-  cursorPosition: { lineNumber: number; column: number } | null
-  scrollPosition: { top: number; left: number } | null
+  cursorPosition: { line: number; column: number }
+  scrollPosition: { top: number; left: number }
   timestamp: number
 }
 
