@@ -156,16 +156,6 @@ const showPreviews = ref(false)  // Combined toggle for both previews
 const activeView = ref<'main' | 'preview1' | 'preview2'>('main')
 const previewCycle = ref<'preview1' | 'preview2'>('preview1')  // Tracks which preview to use next
 
-// Computed helpers for multi-view (used by subsequent tasks)
-const currentPreviewState = computed(() => {
-  if (activeView.value === 'preview1') return preview1State.value
-  if (activeView.value === 'preview2') return preview2State.value
-  return null
-})
-const hasMainEditorContent = computed(() => {
-  return mainEditorState.value.filePath !== null
-})
-
 // Watch for preview toggle changes (will sync with terminal visibility in subsequent tasks)
 watch(showPreviews, (show) => {
   // Mutual exclusivity: hide terminal when previews are shown
@@ -188,15 +178,17 @@ watch(showPreviews, (show) => {
   }
 })
 
-// Watch activeView to track focus (will be used for keyboard shortcuts)
-watch(activeView, (view) => {
-  // Log current preview state for debugging (will be replaced with actual logic)
-  if (view !== 'main' && currentPreviewState.value) {
-    console.debug('Active preview:', view, currentPreviewState.value.filePath)
-  }
-  // Also log main editor state when switching back
-  if (view === 'main' && hasMainEditorContent.value) {
-    console.debug('Main editor active:', mainEditorState.value.filePath)
+// Watch activeView to track focus and expand file tree for active view
+watch(activeView, async (view) => {
+  // Get the target file based on active view
+  const targetFile =
+    view === 'main' ? currentFile.value :
+    view === 'preview1' ? preview1State.value.filePath :
+    view === 'preview2' ? preview2State.value.filePath :
+    null
+
+  if (targetFile) {
+    await expandParents(targetFile)
   }
 })
 
@@ -217,6 +209,19 @@ watch(currentFile, (newFile, oldFile) => {
       // New file not in history - add entry with default position
       addHistoryEntry(mainEditorState.value, newFile)
     }
+  }
+})
+
+// Watch preview file changes to expand file tree
+watch(() => preview1State.value.filePath, async (newFile) => {
+  if (newFile && activeView.value === 'preview1') {
+    await expandParents(newFile)
+  }
+})
+
+watch(() => preview2State.value.filePath, async (newFile) => {
+  if (newFile && activeView.value === 'preview2') {
+    await expandParents(newFile)
   }
 })
 
@@ -747,7 +752,8 @@ const {
   loadRoot,
   expandDir,
   collapseDir,
-  getNode
+  getNode,
+  expandParents
 } = useFileTree(taskId)
 
 // Provide file tree to child components
@@ -1724,7 +1730,19 @@ const cancelDeleteTask = () => {
 
 // Helper functions for FileTreeItem
 const isChanged = (path: string) => changedFiles.value.some(f => f.path === path)
-const isSelected = (path: string) => currentFile.value === path && editorMode.value === 'editor'
+const isSelected = (path: string) => {
+  // Highlight file based on active view
+  if (activeView.value === 'main') {
+    return currentFile.value === path && editorMode.value === 'editor'
+  }
+  if (activeView.value === 'preview1') {
+    return preview1State.value.filePath === path
+  }
+  if (activeView.value === 'preview2') {
+    return preview2State.value.filePath === path
+  }
+  return false
+}
 const isLoading = (path: string) => loadingPaths.value.has(path)
 const getFileStatus = (path: string) => changedFiles.value.find(f => f.path === path)?.status
 

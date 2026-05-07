@@ -24,7 +24,8 @@ const createMockFileTree = (): UseFileTreeReturn => ({
     ]))
     return nodes.value.get(path)
   },
-  getChildPaths: () => []
+  getChildPaths: () => [],
+  expandParents: async () => {}
 })
 
 // Helper function to mount FileTreeItem with all required providers

@@ -31,6 +31,7 @@ export interface UseFileTreeReturn {
   collapseDir: (path: string) => void
   getNode: (path: string) => FileNode | undefined
   getChildPaths: (path: string) => string[]
+  expandParents: (filePath: string) => Promise<void>
 }
 
 // Convert API node to flattened FileNode
@@ -140,6 +141,21 @@ export function useFileTree(taskId: Ref<string>): UseFileTreeReturn {
     return node?.type === 'directory' ? (node.children || []) : []
   }
 
+  // Expand all parent directories of a file, making it visible in the tree
+  const expandParents = async (filePath: string): Promise<void> => {
+    if (!filePath) return
+
+    // Extract all parent directory paths
+    const parts = filePath.split('/')
+    for (let i = 1; i < parts.length; i++) {
+      const parentPath = parts.slice(0, i).join('/')
+      const node = nodes.value.get(parentPath)
+      if (node && node.type === 'directory' && !expandedDirs.value.has(parentPath)) {
+        await expandDir(parentPath)
+      }
+    }
+  }
+
   return {
     nodes,
     rootPaths,
@@ -150,7 +166,8 @@ export function useFileTree(taskId: Ref<string>): UseFileTreeReturn {
     expandDir,
     collapseDir,
     getNode,
-    getChildPaths
+    getChildPaths,
+    expandParents
   }
 }
 
