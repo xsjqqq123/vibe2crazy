@@ -15,6 +15,7 @@ interface Emits {
   (e: 'update:content', value: string): void
   (e: 'history-select', entry: HistoryEntry): void
   (e: 'cursor-change', position: { lineNumber: number; column: number }): void
+  (e: 'focus'): void
 }
 
 const props = defineProps<Props>()
@@ -50,6 +51,10 @@ const handleHistorySelect = (entry: HistoryEntry) => {
 
 const handleCursorChange = (position: { lineNumber: number; column: number }) => {
   emit('cursor-change', position)
+}
+
+const handleFocus = () => {
+  emit('focus')
 }
 
 /**
@@ -162,6 +167,7 @@ defineExpose({
         :file-path="filePath"
         :read-only="isPreview"
         @cursor-change="handleCursorChange"
+        @focus="handleFocus"
       />
     </div>
   </div>

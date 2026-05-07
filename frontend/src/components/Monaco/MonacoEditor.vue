@@ -22,6 +22,7 @@ interface Emits {
   (e: 'cursor-word', word: string, position: { lineNumber: number; column: number }): void
   (e: 'find-references', selectedText: string): void
   (e: 'cursor-change', position: { lineNumber: number; column: number }): void
+  (e: 'focus'): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -174,6 +175,11 @@ onMounted(async () => {
         column: e.position.column
       })
     }
+  })
+
+  // Listen for editor focus
+  editor.onDidFocusEditorWidget(() => {
+    emit('focus')
   })
 
   // Listen for cursor word based on device type

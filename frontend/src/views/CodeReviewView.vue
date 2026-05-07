@@ -2488,6 +2488,11 @@ const handleMainEditorHistorySelect = async (entry: HistoryEntry) => {
 const handlePreview1HistorySelect = (entry: HistoryEntry) => handleHistorySelect(preview1State, entry)
 const handlePreview2HistorySelect = (entry: HistoryEntry) => handleHistorySelect(preview2State, entry)
 
+// Focus handlers for each view
+const handleMainEditorFocus = () => { activeView.value = 'main' }
+const handlePreview1Focus = () => { activeView.value = 'preview1' }
+const handlePreview2Focus = () => { activeView.value = 'preview2' }
+
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('keydown', handleGlobalKeydown)
@@ -3060,6 +3065,7 @@ onUnmounted(() => {
                     @content-change="handleContentChange"
                     @cursor-word="handleCursorWord"
                     @find-references="handleFindReferences"
+                    @focus="handleMainEditorFocus"
                   />
                   <SymbolOutline
                     ref="outlineRef"
@@ -3128,6 +3134,7 @@ onUnmounted(() => {
                     :content="preview1State.fileContent"
                     :history="preview1State.history"
                     @history-select="handlePreview1HistorySelect"
+                    @focus="handlePreview1Focus"
                   />
                 </div>
               </pane>
@@ -3141,6 +3148,7 @@ onUnmounted(() => {
                     :content="preview2State.fileContent"
                     :history="preview2State.history"
                     @history-select="handlePreview2HistorySelect"
+                    @focus="handlePreview2Focus"
                   />
                 </div>
               </pane>
