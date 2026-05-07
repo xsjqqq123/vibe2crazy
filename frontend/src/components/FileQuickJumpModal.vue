@@ -10,6 +10,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
   'select-file': [filePath: string]
+  'preview-file': [filePath: string]
 }>()
 
 // State
@@ -81,6 +82,15 @@ const performSearch = async () => {
 const selectFile = (filePath: string) => {
   emit('select-file', filePath)
   emit('close')
+}
+
+// Handle mouse down for middle-click preview
+const handleMouseDown = (e: MouseEvent, filePath: string) => {
+  if (e.button === 1) {  // Middle click
+    e.preventDefault()
+    emit('preview-file', filePath)
+    emit('close')
+  }
 }
 
 // Keyboard navigation
@@ -196,6 +206,7 @@ onUnmounted(() => {
                   { 'selected': index === selectedIndex }
                 ]"
                 @click="selectFile(file)"
+                @mousedown.prevent="handleMouseDown($event, file)"
               >
                 <span class="file-quick-jump-item-icon">📄</span>
                 <span class="file-quick-jump-item-path">{{ file }}</span>
@@ -206,7 +217,7 @@ onUnmounted(() => {
           <!-- Footer -->
           <div class="file-quick-jump-footer">
             <span class="file-quick-jump-hint">
-              <kbd>↑</kbd> <kbd>↓</kbd> Navigate · <kbd>Enter</kbd> Open · <kbd>ESC</kbd> Close
+              <kbd>↑</kbd> <kbd>↓</kbd> Navigate · <kbd>Enter</kbd> Open · <kbd>中键</kbd> Preview · <kbd>ESC</kbd> Close
             </span>
             <span class="file-quick-jump-count">
               {{ results.length }} result{{ results.length !== 1 ? 's' : '' }}

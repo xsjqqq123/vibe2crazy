@@ -192,8 +192,8 @@ watch(activeView, async (view) => {
   }
 })
 
-// Watch currentFile to save/restore position using mainEditorState
-watch(currentFile, (newFile, oldFile) => {
+// Watch currentFile to save/restore position using mainEditorState and expand file tree
+watch(currentFile, async (newFile, oldFile) => {
   // Save position for previous file (update existing history entry)
   if (oldFile && mainEditorState.value.filePath === oldFile) {
     updateHistoryEntry(mainEditorState.value)
@@ -208,6 +208,10 @@ watch(currentFile, (newFile, oldFile) => {
     } else {
       // New file not in history - add entry with default position
       addHistoryEntry(mainEditorState.value, newFile)
+    }
+    // Expand file tree for main editor when file is loaded
+    if (activeView.value === 'main') {
+      await expandParents(newFile)
     }
   }
 })
@@ -1490,6 +1494,11 @@ const handleQuickJumpFileSelect = (filePath: string) => {
   loadFile(filePath, 'editor')
 }
 
+// Handle file preview from quick jump modal (middle click)
+const handleQuickJumpFilePreview = (filePath: string) => {
+  handleFilePreview(filePath)
+}
+
 const openMergeDialog = () => {
   mergeMessage.value = task.value?.name || ''
   showMergeDialog.value = true
@@ -1699,6 +1708,11 @@ const toggleDir = async (path: string) => {
   }
 }
 
+// Collapse all expanded directories
+const collapseAllDirs = () => {
+  expandedDirs.value.clear()
+}
+
 const deleteTask = async (id: string, event: Event) => {
   event.stopPropagation()
   const task = tasks.value.find(t => t.id === id)
@@ -1732,16 +1746,13 @@ const cancelDeleteTask = () => {
 const isChanged = (path: string) => changedFiles.value.some(f => f.path === path)
 const isSelected = (path: string) => {
   // Highlight file based on active view
-  if (activeView.value === 'main') {
-    return currentFile.value === path && editorMode.value === 'editor'
-  }
-  if (activeView.value === 'preview1') {
-    return preview1State.value.filePath === path
-  }
-  if (activeView.value === 'preview2') {
-    return preview2State.value.filePath === path
-  }
-  return false
+  return activeView.value === 'main'
+    ? currentFile.value === path
+    : activeView.value === 'preview1'
+      ? preview1State.value.filePath === path
+      : activeView.value === 'preview2'
+        ? preview2State.value.filePath === path
+        : false
 }
 const isLoading = (path: string) => loadingPaths.value.has(path)
 const getFileStatus = (path: string) => changedFiles.value.find(f => f.path === path)?.status
@@ -2625,11 +2636,18 @@ onUnmounted(() => {
                     Refer
                   </button>
                 </div>
-                <button v-if="activeFilesTab === 'files'" @click="loadFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
+                <div v-if="activeFilesTab === 'files'" class="flex items-center gap-1">
+                  <button @click="collapseAllDirs()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Collapse all directories">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  </button>
+                  <button @click="loadFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div class="relative flex-1 min-h-0">
                 <div v-if="loadingFiles && activeFilesTab === 'files'" class="flex items-center justify-center py-4 absolute inset-0 z-10 bg-main">
@@ -3429,6 +3447,7 @@ onUnmounted(() => {
       :show="showFileQuickJump"
       @close="showFileQuickJump = false"
       @select-file="handleQuickJumpFileSelect"
+      @preview-file="handleQuickJumpFilePreview"
     />
 
     <!-- Settings Modal -->

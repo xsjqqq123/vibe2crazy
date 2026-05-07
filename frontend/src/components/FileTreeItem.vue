@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed, inject, ref, watch, nextTick } from 'vue'
 import { injectFileTree } from '@/composables/useFileTree'
 
 interface Props {
@@ -93,6 +93,21 @@ const status = computed(() => props.status ?? getFileStatus(props.path))
 const indentStyle = computed(() => ({
   paddingLeft: `${props.level * 16}px`
 }))
+
+// Ref for the file/directory element
+const fileItemRef = ref<HTMLElement | null>(null)
+
+// Watch for selection changes and scroll to center when selected
+watch(() => isSelected(props.path), (selected) => {
+  if (selected && fileItemRef.value) {
+    // Use nextTick to ensure DOM is fully updated after expansion
+    nextTick(() => {
+      if (fileItemRef.value) {
+        fileItemRef.value.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+    })
+  }
+})
 </script>
 
 <template>
@@ -139,6 +154,7 @@ const indentStyle = computed(() => ({
     <!-- File Node -->
     <div
       v-else
+      ref="fileItemRef"
       @mousedown="handleMiddleClick"
       @click.stop="handleClick"
       @contextmenu.prevent.stop="handleContextMenu"
@@ -202,6 +218,11 @@ const indentStyle = computed(() => ({
   .file-tree-item.selected:hover {
     background-color: color-mix(in srgb, var(--accent-color) 18%, var(--bg-tertiary));
   }
+}
+
+/* Selected file indicator */
+.file-tree-item.selected {
+  background-color: color-mix(in srgb, var(--accent-color) 15%, var(--bg-primary));
 }
 
 /* Theme-aware changed file indicator */

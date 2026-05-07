@@ -11,7 +11,7 @@ Vibe2Crazy is a single-user remote code editing and collaboration tool built wit
 - **Isolation**: Git worktrees for per-task development environments
 -
 ## Development Commands
-8886766867
+
 ```bash
 # From project root
 ./deploy.sh start    # Start both frontend and backend
