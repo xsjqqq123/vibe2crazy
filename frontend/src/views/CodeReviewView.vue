@@ -30,6 +30,7 @@ import MonacoEditor from '@/components/Monaco/MonacoEditor.vue'
 import MonacoDiffEditor from '@/components/Monaco/MonacoDiffEditor.vue'
 import Terminal from '@/components/Terminal/Terminal.vue'
 import EditorView from '@/components/Monaco/EditorView.vue'
+import PreviewToggle from '@/components/Monaco/PreviewToggle.vue'
 import CommitsList from '@/components/CommitsList.vue'
 import CommitDiffView from '@/components/CommitDiffView.vue'
 import Pagination from '@/components/Pagination.vue'
@@ -2889,6 +2890,12 @@ onUnmounted(() => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
                   </button>
+                  <!-- Preview panes toggle -->
+                  <PreviewToggle
+                    v-if="editorMode === 'editor' && !isMobile"
+                    :show-previews="showPreviews"
+                    @toggle="handleTogglePreviewPanes"
+                  />
                 </div>
               </div>
 
@@ -3003,14 +3010,12 @@ onUnmounted(() => {
                     :symbols="symbols"
                     :collapsed="outlineCollapsed"
                     :preview-collapsed="previewCollapsed"
-                    :show-previews="showPreviews && !isMobile"
                     :task-id="taskId"
                     :current-file-path="currentFile || ''"
                     class="flex-shrink-0"
                     @select="handleSymbolSelect"
                     @toggle="handleOutlineToggle"
                     @preview-toggle="handlePreviewToggle"
-                    @toggle-preview-panes="handleTogglePreviewPanes"
                     @navigate="handleSymbolNavigate"
                   />
                 </div>
@@ -3036,14 +3041,12 @@ onUnmounted(() => {
                     :symbols="symbols"
                     :collapsed="outlineCollapsed"
                     :preview-collapsed="previewCollapsed"
-                    :show-previews="showPreviews && !isMobile"
                     :task-id="taskId"
                     :current-file-path="currentFile || ''"
                     class="flex-shrink-0"
                     @select="handleSymbolSelect"
                     @toggle="handleOutlineToggle"
                     @preview-toggle="handlePreviewToggle"
-                    @toggle-preview-panes="handleTogglePreviewPanes"
                     @navigate="handleSymbolNavigate"
                   />
                 </div>

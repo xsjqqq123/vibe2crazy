@@ -142,8 +142,11 @@ defineExpose({
 <template>
   <div class="editor-view flex flex-col h-full">
     <!-- Toolbar with history dropdown and view type indicator -->
-    <div class="editor-toolbar flex items-center justify-between px-2 py-1 border-b">
-      <span class="view-type-label">{{ viewLabel }}</span>
+    <div class="editor-toolbar flex items-center justify-between px-2 py-1 border-b border-main">
+      <div class="flex items-center gap-2">
+        <span class="view-type-label text-sm font-medium">{{ viewLabel }}</span>
+        <span v-if="filePath" class="text-xs text-muted truncate max-w-48">{{ filePath.split('/').pop() }}</span>
+      </div>
       <EditorHistoryDropdown
         :history="history"
         :current-file="currentFile"
@@ -166,12 +169,17 @@ defineExpose({
 
 <style scoped>
 .editor-view {
-  background: var(--bg-color, #fff);
+  background: var(--bg-primary);
 }
 
 .editor-toolbar {
   min-height: 28px;
   flex-shrink: 0;
+  background: var(--bg-primary);
+}
+
+.view-type-label {
+  color: var(--text-primary);
 }
 
 .editor-container {

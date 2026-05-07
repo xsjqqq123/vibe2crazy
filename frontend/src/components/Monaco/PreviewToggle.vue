@@ -48,38 +48,15 @@ const togglePreviews = () => {
   border: none;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--text-muted);
 }
 
 .preview-toggle-btn:hover {
-  background-color: var(--color-bg-sub, #f3f4f6);
+  background-color: var(--bg-tertiary);
 }
 
 .preview-toggle-btn.active {
-  color: var(--color-primary, #3b82f6);
-  background-color: var(--color-bg-sub, #f3f4f6);
-}
-
-.preview-toggle-btn.active:hover {
-  background-color: var(--color-bg-hover, #e5e7eb);
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .preview-toggle-btn {
-    color: var(--color-text-muted, #9ca3af);
-  }
-
-  .preview-toggle-btn:hover {
-    background-color: var(--color-bg-sub, #374151);
-  }
-
-  .preview-toggle-btn.active {
-    background-color: var(--color-bg-sub, #374151);
-  }
-
-  .preview-toggle-btn.active:hover {
-    background-color: var(--color-bg-hover, #4b5563);
-  }
+  color: var(--accent-color);
+  background-color: var(--bg-tertiary);
 }
 </style>
