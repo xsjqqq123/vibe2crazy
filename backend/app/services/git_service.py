@@ -45,6 +45,11 @@ class GitService:
         Returns:
             subprocess.CompletedProcess with the result
         """
+        # Add -c core.quotePath=false to git commands that return filenames
+        # to prevent octal quoting of non-ASCII characters
+        if command[0] == "git" and ("status" in command or "diff" in command):
+            command = ["git", "-c", "core.quotePath=false"] + command[1:]
+
         result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, encoding='utf-8')
 
         # Record command execution if log is provided
@@ -228,8 +233,9 @@ class GitService:
             all_files = set()
 
             # 1. Get unstaged changes (modified but not staged)
+            # -c core.quotePath=false: output non-ASCII filenames without octal quoting
             result = subprocess.run(
-                ["git", "diff", "--name-only"],
+                ["git", "-c", "core.quotePath=false", "diff", "--name-only"],
                 cwd=worktree_path,
                 capture_output=True,
                 text=True, encoding="utf-8"
@@ -239,7 +245,7 @@ class GitService:
 
             # 2. Get staged changes
             result = subprocess.run(
-                ["git", "diff", "--cached", "--name-only"],
+                ["git", "-c", "core.quotePath=false", "diff", "--cached", "--name-only"],
                 cwd=worktree_path,
                 capture_output=True,
                 text=True, encoding="utf-8"
@@ -248,8 +254,9 @@ class GitService:
                 all_files.update(result.stdout.strip().split("\n"))
 
             # 3. Get untracked files (new files not yet committed)
+            # ls-files doesn't quote by default, but add core.quotePath=false for consistency
             result = subprocess.run(
-                ["git", "ls-files", "--others", "--exclude-standard"],
+                ["git", "-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard"],
                 cwd=worktree_path,
                 capture_output=True,
                 text=True, encoding="utf-8"
@@ -280,8 +287,9 @@ class GitService:
             # X = staged status, Y = unstaged status
             # For new files: ?? filename
             # -uall: list all untracked files (not just directory names)
+            # -c core.quotePath=false: output non-ASCII filenames without octal quoting
             result = subprocess.run(
-                ["git", "status", "--porcelain", "-uall"],
+                ["git", "-c", "core.quotePath=false", "status", "--porcelain", "-uall"],
                 cwd=worktree_path,
                 capture_output=True,
                 text=True, encoding="utf-8"
@@ -684,7 +692,7 @@ class GitService:
 
                 # Determine file status
                 status_result = subprocess.run(
-                    ["git", "diff", "--name-status", f"{commit_hash}^..{commit_hash}"],
+                    ["git", "-c", "core.quotePath=false", "diff", "--name-status", f"{commit_hash}^..{commit_hash}"],
                     cwd=worktree_path,
                     capture_output=True,
                     text=True, encoding="utf-8",
@@ -926,7 +934,7 @@ class GitService:
 
                         # Determine file status by checking if it exists in HEAD
                         status_result = subprocess.run(
-                            ["git", "diff", "--name-status", f"{full_hash}^..{full_hash}"],
+                            ["git", "-c", "core.quotePath=false", "diff", "--name-status", f"{full_hash}^..{full_hash}"],
                             cwd=worktree_path,
                             capture_output=True,
                             text=True, encoding="utf-8"
@@ -974,7 +982,7 @@ class GitService:
         try:
             # Check if there are any changes
             status_result = subprocess.run(
-                ["git", "status", "--porcelain"],
+                ["git", "-c", "core.quotePath=false", "status", "--porcelain"],
                 cwd=worktree_path,
                 capture_output=True,
                 text=True, encoding="utf-8"
@@ -1210,7 +1218,7 @@ class GitService:
             List of filenames that have merge conflicts (UU, AA status)
         """
         status_result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "-c", "core.quotePath=false", "status", "--porcelain"],
             cwd=worktree_path,
             capture_output=True,
             text=True, encoding="utf-8"
@@ -1358,7 +1366,7 @@ class GitService:
 
             # Get all changed files in this commit with stats
             diff_result = subprocess.run(
-                ["git", "diff", "--name-status", f"{parent_hash}..{commit_hash}"],
+                ["git", "-c", "core.quotePath=false", "diff", "--name-status", f"{parent_hash}..{commit_hash}"],
                 cwd=worktree_path,
                 capture_output=True,
                 text=True, encoding="utf-8"

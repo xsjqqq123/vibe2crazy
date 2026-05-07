@@ -68,7 +68,7 @@ class GrepService:
             logger.warning(f"Failed to write cache: {e}")
 
     @staticmethod
-    def search(worktree_path: str, query: str, page: int = 1, per_page: int = 20, current_file: str = None) -> dict:
+    def search(task_id: str, worktree_path: str, query: str, page: int = 1, per_page: int = 20, current_file: str = None) -> dict:
         """
         执行 ripgrep 搜索
         Returns: {
@@ -82,10 +82,8 @@ class GrepService:
         if current_file and not current_file.startswith('/'):
             current_file = os.path.join(worktree_path, current_file)
 
-        # 全量缓存键（不包含 page，存储所有结果）
-        full_cache_path = GrepService._get_cache_path(
-            worktree_path.split('/')[-1], query, 0
-        )
+        # 全量缓存键（使用 task_id 确保唯一性）
+        full_cache_path = GrepService._get_cache_path(task_id, query, 0)
 
         # 尝试读取全量缓存
         cached = GrepService._read_cache(full_cache_path)

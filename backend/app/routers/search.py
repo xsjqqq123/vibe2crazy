@@ -39,6 +39,7 @@ def grep_search(request: SearchRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Task not found")
 
     data = GrepService.search(
+        task_id=request.task_id,
         worktree_path=task.worktree_path,
         query=request.query,
         page=request.page,

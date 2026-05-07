@@ -425,26 +425,32 @@ const initTerminal = () => {
 
   // Handle user input - filter out PageUp/PageDown
   xterm.value.onData((data: string) => {
+    console.log('[GlobalTerminal] onData triggered:', JSON.stringify(data))
     // PageUp: \x1b[5~ or \x1b[5;~ (with modifiers)
     // PageDown: \x1b[6~ or \x1b[6;~ (with modifiers)
     if (data === '\x1b[5~' || data === '\x1b[6~' ||
         data.startsWith('\x1b[5;') || data.startsWith('\x1b[6;')) {
       // Skip sending PageUp/PageDown to backend - handled by onKey
+      console.log('[GlobalTerminal] onData: skipping PageUp/PageDown')
       return
     }
+    console.log('[GlobalTerminal] onData: sending to backend')
     send(data)
   })
 
   // Handle PageUp/PageDown keys for scroll mode
   xterm.value.onKey(({ key, domEvent }) => {
+    console.log('[GlobalTerminal] onKey triggered:', JSON.stringify(key), 'code:', domEvent.code)
     const isPageUp = domEvent.code === 'PageUp' || key === '\x1b[5~'
     const isPageDown = domEvent.code === 'PageDown' || key === '\x1b[6~'
 
     if (isPageUp) {
+      console.log('[GlobalTerminal] onKey: PageUp - entering scroll mode')
       enterScrollMode()
       sendScrollCommand('up', true)
       domEvent.preventDefault()
     } else if (isPageDown) {
+      console.log('[GlobalTerminal] onKey: PageDown - scroll down')
       sendScrollCommand('down', true)
       domEvent.preventDefault()
     }

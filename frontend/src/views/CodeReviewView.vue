@@ -715,7 +715,7 @@ const terminalPercent = computed(() => {
 const mainEditorPercent = computed(() => {
   // When previews shown on desktop: 70% main editor
   // When previews hidden or on mobile: calculate based on terminal visibility
-  if (isMobile.value) return 100
+  if (isMobile.value) return showTerminal.value ? 0 : 100
   if (showPreviews.value) return 70
   return showTerminal.value ? (100 - terminalPercent.value) : 100
 })
@@ -2859,7 +2859,7 @@ onUnmounted(() => {
             :size="(isMobile && showFileList) ? 0 : (isMobile ? 100 : (100 - layout.sidebar))"
             :min-size="(isMobile && showFileList) ? 0 : 20">
         <splitpanes ref="editorSplitpanesRef" vertical class="default-theme h-full min-h-0" @resize="handleEditorResize">
-          <pane :size="mainEditorPercent" :min-size="10" class="flex flex-col min-h-0">
+          <pane :size="mainEditorPercent" :min-size="isMobile && showTerminal ? 0 : 10" class="flex flex-col min-h-0">
             <!-- Editor area -->
             <main class="flex-1 flex flex-col overflow-hidden bg-main">
               <!-- Editor header -->
