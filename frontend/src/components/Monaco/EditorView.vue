@@ -144,7 +144,7 @@ defineExpose({
     <!-- Toolbar with history dropdown and view type indicator -->
     <div class="editor-toolbar flex items-center justify-between px-2 py-1 border-b border-main">
       <div class="flex items-center gap-2">
-        <span class="view-type-label text-sm font-medium">{{ viewLabel }}</span>
+        <span v-if="viewType === 'main'" class="view-type-label text-sm font-medium">{{ viewLabel }}</span>
         <span v-if="filePath" class="text-xs text-muted truncate max-w-48">{{ filePath.split('/').pop() }}</span>
       </div>
       <EditorHistoryDropdown
