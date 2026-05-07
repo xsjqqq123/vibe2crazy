@@ -2469,6 +2469,19 @@ const loadFileInView = async (filePath: string, viewState: Ref<EditorViewState>,
   }
 }
 
+/**
+ * Handle history selection from EditorView dropdown
+ * @param viewState The view state that emitted the event
+ * @param entry The selected history entry
+ */
+const handleHistorySelect = async (viewState: Ref<EditorViewState>, entry: HistoryEntry) => {
+  await loadFileInView(entry.filePath, viewState, entry)
+}
+
+// History handlers for each preview view
+const handlePreview1HistorySelect = (entry: HistoryEntry) => handleHistorySelect(preview1State, entry)
+const handlePreview2HistorySelect = (entry: HistoryEntry) => handleHistorySelect(preview2State, entry)
+
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('keydown', handleGlobalKeydown)
@@ -3101,6 +3114,7 @@ onUnmounted(() => {
                     :filePath="preview1State.filePath"
                     :content="preview1State.fileContent"
                     :history="preview1State.history"
+                    @history-select="handlePreview1HistorySelect"
                   />
                 </div>
               </pane>
@@ -3113,6 +3127,7 @@ onUnmounted(() => {
                     :filePath="preview2State.filePath"
                     :content="preview2State.fileContent"
                     :history="preview2State.history"
+                    @history-select="handlePreview2HistorySelect"
                   />
                 </div>
               </pane>
