@@ -2429,7 +2429,7 @@ const navigateHistory = (direction: 'backward' | 'forward') => {
  */
 const loadFileInView = async (filePath: string, viewState: Ref<EditorViewState>, entry: HistoryEntry) => {
   // For main view, use the existing loadFile function
-  if (activeView.value === 'main') {
+  if (viewState === mainEditorState) {
     await loadFile(filePath, 'editor')
     // Position will be restored by the watch on currentFile
     return
