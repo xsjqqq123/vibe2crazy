@@ -30,6 +30,7 @@ import MonacoEditor from '@/components/Monaco/MonacoEditor.vue'
 import MonacoDiffEditor from '@/components/Monaco/MonacoDiffEditor.vue'
 import Terminal from '@/components/Terminal/Terminal.vue'
 import EditorView from '@/components/Monaco/EditorView.vue'
+import EditorHistoryDropdown from '@/components/Monaco/EditorHistoryDropdown.vue'
 import PreviewToggle from '@/components/Monaco/PreviewToggle.vue'
 import CommitsList from '@/components/CommitsList.vue'
 import CommitDiffView from '@/components/CommitDiffView.vue'
@@ -2478,7 +2479,12 @@ const handleHistorySelect = async (viewState: Ref<EditorViewState>, entry: Histo
   await loadFileInView(entry.filePath, viewState, entry)
 }
 
-// History handlers for each preview view
+// History handlers for each view
+const handleMainEditorHistorySelect = async (entry: HistoryEntry) => {
+  await loadFile(entry.filePath, 'editor')
+  // Restore position after file loads
+  restoreEditorPosition(mainEditorState.value, entry)
+}
 const handlePreview1HistorySelect = (entry: HistoryEntry) => handleHistorySelect(preview1State, entry)
 const handlePreview2HistorySelect = (entry: HistoryEntry) => handleHistorySelect(preview2State, entry)
 
@@ -2903,6 +2909,13 @@ onUnmounted(() => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
                   </button>
+                  <!-- Recent files dropdown for main editor -->
+                  <EditorHistoryDropdown
+                    v-if="editorMode === 'editor'"
+                    :history="mainEditorState.history"
+                    :current-file="currentFile"
+                    @select="handleMainEditorHistorySelect"
+                  />
                   <!-- Preview panes toggle -->
                   <PreviewToggle
                     v-if="editorMode === 'editor' && !isMobile"
