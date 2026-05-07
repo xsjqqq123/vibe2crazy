@@ -3092,19 +3092,7 @@ onUnmounted(() => {
           <!-- Preview area - shows when showPreviews=true, replaces terminal -->
           <pane v-if="!showFileList && showPreviews && !isMobile" :size="previewPercent" :min-size="10" class="flex flex-col min-h-0">
             <splitpanes horizontal class="default-theme h-full min-h-0">
-              <!-- Preview2 (top) -->
-              <pane :size="preview2Percent" :min-size="10" class="flex flex-col min-h-0 bg-main border-l border-main">
-                <div class="flex-1 min-h-0 overflow-hidden">
-                  <EditorView
-                    ref="preview2Ref"
-                    viewType="preview2"
-                    :filePath="preview2State.filePath"
-                    :content="preview2State.fileContent"
-                    :history="preview2State.history"
-                  />
-                </div>
-              </pane>
-              <!-- Preview1 (bottom) -->
+              <!-- Preview1 (top) -->
               <pane :size="preview1Percent" :min-size="10" class="flex flex-col min-h-0 bg-main border-l border-main">
                 <div class="flex-1 min-h-0 overflow-hidden">
                   <EditorView
@@ -3113,6 +3101,18 @@ onUnmounted(() => {
                     :filePath="preview1State.filePath"
                     :content="preview1State.fileContent"
                     :history="preview1State.history"
+                  />
+                </div>
+              </pane>
+              <!-- Preview2 (bottom) -->
+              <pane :size="preview2Percent" :min-size="10" class="flex flex-col min-h-0 bg-main border-l border-main">
+                <div class="flex-1 min-h-0 overflow-hidden">
+                  <EditorView
+                    ref="preview2Ref"
+                    viewType="preview2"
+                    :filePath="preview2State.filePath"
+                    :content="preview2State.fileContent"
+                    :history="preview2State.history"
                   />
                 </div>
               </pane>
