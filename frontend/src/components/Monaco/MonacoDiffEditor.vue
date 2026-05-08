@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { loader } from '@guolao/vue-monaco-editor'
 import { useMainStore, type ThemeName } from '@/store'
 
@@ -91,34 +91,21 @@ const getMonacoTheme = (theme: ThemeName): string => {
   return themeMap[theme]
 }
 
-// Update diff count when content changes
+// Update diff count when diff computation completes
 const updateDiffCount = () => {
   if (!diffEditor) return
 
-  // Use nextTick to ensure DOM is updated, then wait a bit for Monaco to compute diff
-  nextTick(() => {
-    setTimeout(() => {
-      if (!diffEditor) return
-      const lineChanges = diffEditor.getLineChanges()
-      totalDiffs.value = lineChanges?.length || 0
-      // Reset current index if no changes
-      if (totalDiffs.value === 0) {
-        currentDiffIndex.value = 0
-      }
-    }, 100) // Small delay to ensure Monaco has computed the diff
-  })
+  const lineChanges = diffEditor.getLineChanges()
+  totalDiffs.value = lineChanges?.length || 0
+  // Always reset current index when diff updates (file switch or content change)
+  currentDiffIndex.value = 0
 }
 
 // Navigate to the next diff hunk
 const goToNextDiff = () => {
   if (!diffEditor || totalDiffs.value === 0) return
 
-  // Increment index with wrap-around
-  currentDiffIndex.value = (currentDiffIndex.value + 1) % totalDiffs.value
-
-  // Navigate to the diff
   try {
-    // Try using the Monaco API's gotoDiff method
     const lineChanges = diffEditor.getLineChanges()
     if (lineChanges && lineChanges[currentDiffIndex.value]) {
       const change = lineChanges[currentDiffIndex.value]
@@ -126,14 +113,15 @@ const goToNextDiff = () => {
       // Get the modified editor (right side)
       const modifiedEditor = diffEditor.getModifiedEditor()
 
-      // Reveal the line in the center of the viewport
-      modifiedEditor.revealLineInCenter(
-        change.modifiedEndLineNumber || change.modifiedStartLineNumber
-      )
+      // Reveal the START line of the diff (not end line)
+      modifiedEditor.revealLineInCenter(change.modifiedStartLineNumber)
 
       if (!props.isMobile) {
         modifiedEditor.focus()
       }
+
+      // Increment index AFTER navigation, with wrap-around for next click
+      currentDiffIndex.value = (currentDiffIndex.value + 1) % totalDiffs.value
     }
   } catch (e) {
     console.error('Error navigating to diff:', e)
@@ -144,10 +132,9 @@ const goToNextDiff = () => {
 const goToPrevDiff = () => {
   if (!diffEditor || totalDiffs.value === 0) return
 
-  // Decrement index with wrap-around
+  // Decrement index BEFORE navigation (go to previous)
   currentDiffIndex.value = currentDiffIndex.value === 0 ? totalDiffs.value - 1 : currentDiffIndex.value - 1
 
-  // Navigate to the diff
   try {
     const lineChanges = diffEditor.getLineChanges()
     if (lineChanges && lineChanges[currentDiffIndex.value]) {
@@ -156,10 +143,8 @@ const goToPrevDiff = () => {
       // Get the modified editor (right side)
       const modifiedEditor = diffEditor.getModifiedEditor()
 
-      // Reveal the line in the center of the viewport
-      modifiedEditor.revealLineInCenter(
-        change.modifiedEndLineNumber || change.modifiedStartLineNumber
-      )
+      // Reveal the START line of the diff (not end line)
+      modifiedEditor.revealLineInCenter(change.modifiedStartLineNumber)
 
       if (!props.isMobile) {
         modifiedEditor.focus()
@@ -230,14 +215,16 @@ onMounted(async () => {
     modified: modifiedModel
   })
 
-  // Update diff count after models are set
-  updateDiffCount()
+  // Listen for diff update event - this fires when Monaco completes diff computation
+  diffEditor.onDidUpdateDiff(() => {
+    updateDiffCount()
+  })
 
   // Listen for content changes in modified model
   modifiedModel.onDidChangeContent(() => {
     if (modifiedModel) {
       emit('update:modified', modifiedModel.getValue())
-      updateDiffCount()
+      // updateDiffCount() is handled by onDidUpdateDiff automatically
     }
   })
 
@@ -317,7 +304,7 @@ onUnmounted(() => {
 watch(() => props.original, (newValue) => {
   if (originalModel && originalModel.getValue() !== newValue) {
     originalModel.setValue(newValue)
-    updateDiffCount()
+    // updateDiffCount() is handled by onDidUpdateDiff automatically
   }
 })
 
@@ -325,7 +312,7 @@ watch(() => props.original, (newValue) => {
 watch(() => props.modified, (newValue) => {
   if (modifiedModel && modifiedModel.getValue() !== newValue) {
     modifiedModel.setValue(newValue)
-    updateDiffCount()
+    // updateDiffCount() is handled by onDidUpdateDiff automatically
   }
 })
 
