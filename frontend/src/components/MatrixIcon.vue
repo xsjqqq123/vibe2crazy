@@ -7,7 +7,7 @@ const openMatrix = () => {
 <template>
   <button
     @click="openMatrix"
-    class="p-1.5 rounded-lg hover:bg-sub hidden md:block"
+    class="p-0 rounded-lg hover:bg-sub hidden md:block"
     title="Terminal Matrix"
   >
     <svg

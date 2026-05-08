@@ -17,7 +17,7 @@ const togglePreviews = () => {
 
 <template>
   <button
-    class="p-1.5 rounded-lg hover:bg-sub transition-colors"
+    class="p-0 rounded-lg hover:bg-sub transition-colors"
     :class="{ 'text-accent': showPreviews, 'text-sub': !showPreviews }"
     title="Toggle preview panels"
     @click="togglePreviews"

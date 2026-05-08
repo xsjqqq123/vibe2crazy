@@ -239,12 +239,12 @@ onMounted(async () => {
           <p class="text-xs text-sub">Projects</p>
         </div>
         <div class="flex items-center gap-2">
-          <button @click="manualCheckUpdate" class="p-1.5 rounded-lg hover:bg-sub" title="Check for Updates">
+          <button @click="manualCheckUpdate" class="p-0 rounded-lg hover:bg-sub" title="Check for Updates">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
-          <button @click="cycleTheme" class="p-1.5 rounded-lg hover:bg-sub" title="Cycle theme">
+          <button @click="cycleTheme" class="p-0 rounded-lg hover:bg-sub" title="Cycle theme">
             <!-- Sun icon for light theme -->
             <svg v-if="theme === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -264,7 +264,7 @@ onMounted(async () => {
           </button>
           <GlobalTerminalIcon />
           <MatrixIcon />
-          <button @click="logout" class="p-1.5 rounded-lg hover:bg-sub" title="Logout">
+          <button @click="logout" class="p-0 rounded-lg hover:bg-sub" title="Logout">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
@@ -348,7 +348,7 @@ onMounted(async () => {
               v-model="newProject.git_path"
               placeholder="/path/to/repo"
             />
-            <p class="text-xs text-gray-500 mt-1">Path to git repository - branch will be auto-detected when path is entered</p>
+            <p class="text-xs text-sub mt-1">Path to git repository - branch will be auto-detected when path is entered</p>
           </div>
 
           <div>
@@ -360,7 +360,7 @@ onMounted(async () => {
               :git-path="newProject.git_path"
               placeholder="main"
             />
-            <p class="text-xs text-gray-500 mt-1">Auto-detected from repository, or select from dropdown</p>
+            <p class="text-xs text-sub mt-1">Auto-detected from repository, or select from dropdown</p>
           </div>
 
           <div v-if="createError" class="text-red-600 dark:text-red-400 text-sm">

@@ -119,8 +119,16 @@ async function handleIndexClick() {
 }
 
 async function loadPreview(symbol: SymbolInfo) {
-  // Skip API call if preview panel is collapsed
+  // Skip if preview panel is collapsed
   if (props.previewCollapsed) {
+    return
+  }
+
+  // Skip if already loaded this symbol (not loading and same name)
+  if (
+    previewSymbol.value?.name === symbol.name &&
+    !previewLoading.value
+  ) {
     return
   }
 

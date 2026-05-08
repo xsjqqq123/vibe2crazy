@@ -2024,6 +2024,17 @@ const contextMenuItems = computed<MenuItem[]>(() => {
         console.log('[ContextMenu] Copy Path clicked, path:', contextMenu.value.path)
         copyPathToClipboard(contextMenu.value.path)
       }
+    },
+    {
+      label: 'Copy Full Path',
+      icon: '📁',
+      action: () => {
+        const fullPath = task.value?.worktree_path
+          ? `${task.value.worktree_path}/${contextMenu.value.path}`
+          : contextMenu.value.path
+        console.log('[ContextMenu] Copy Full Path clicked, path:', fullPath)
+        copyPathToClipboard(fullPath)
+      }
     }
   ]
 
@@ -2603,7 +2614,7 @@ onUnmounted(() => {
           <!-- File list button (mobile only) -->
           <button
             @click="toggleFileList"
-            class="md:hidden p-1.5 rounded-lg hover:bg-sub"
+            class="md:hidden p-0 rounded-lg hover:bg-sub"
             title="Files"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2612,14 +2623,14 @@ onUnmounted(() => {
           </button>
           <button
             @click="toggleTerminal"
-            class="p-1.5 rounded-lg hover:bg-sub"
+            class="p-0 rounded-lg hover:bg-sub"
             title="Terminal"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
-          <button @click="cycleTheme" class="p-1.5 rounded-lg hover:bg-sub" title="Cycle theme">
+          <button @click="cycleTheme" class="p-0 rounded-lg hover:bg-sub" title="Cycle theme">
             <!-- Sun icon for light theme -->
             <svg v-if="theme === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -2638,7 +2649,7 @@ onUnmounted(() => {
             </svg>
           </button>
           <GlobalTerminalIcon />
-          <button @click="showSettingsModal = true" class="p-1.5 rounded-lg hover:bg-sub" title="Settings">
+          <button @click="showSettingsModal = true" class="p-0 rounded-lg hover:bg-sub" title="Settings">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -2754,7 +2765,7 @@ onUnmounted(() => {
                 v-if="activeTab === 'changes'"
                 @click="openCommitMessageModal"
                 :disabled="accepting"
-                :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
+                :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
                 title="Accept"
               >
                 <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
@@ -2767,7 +2778,7 @@ onUnmounted(() => {
                 v-if="activeTab === 'commits' && !task?.direct_on_branch"
                 @click="mergeTask"
                 :disabled="syncing"
-                :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
+                :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
                 title="Merge"
               >
                 <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
@@ -2925,7 +2936,7 @@ onUnmounted(() => {
                     v-if="editorMode === 'diff'"
                     @click="goToPrevDiff"
                     :disabled="!diffEditorRef?.hasDiffs"
-                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': !diffEditorRef?.hasDiffs }]"
+                    :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': !diffEditorRef?.hasDiffs }]"
                     title="Jump to previous change"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2936,7 +2947,7 @@ onUnmounted(() => {
                     v-if="editorMode === 'diff'"
                     @click="goToNextDiff"
                     :disabled="!diffEditorRef?.hasDiffs"
-                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': !diffEditorRef?.hasDiffs }]"
+                    :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': !diffEditorRef?.hasDiffs }]"
                     title="Jump to next change"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2946,7 +2957,7 @@ onUnmounted(() => {
                   <button
                     v-if="editorMode === 'commit-diff'"
                     @click="closeCommitDiff"
-                    class="p-1.5 rounded-lg hover:bg-sub"
+                    class="p-0 rounded-lg hover:bg-sub"
                     title="Close"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2957,7 +2968,7 @@ onUnmounted(() => {
                     v-if="editorMode === 'editor' && (fileContent !== originalContent || savingContent)"
                     @click="saveFile"
                     :disabled="savingContent"
-                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': savingContent }]"
+                    :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': savingContent }]"
                     title="Save"
                   >
                     <span v-if="savingContent" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
@@ -2969,7 +2980,7 @@ onUnmounted(() => {
                     v-if="editorMode === 'conflict'"
                     @click="saveConflictFile"
                     :disabled="savingContent"
-                    :class="['p-1.5 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': savingContent }]"
+                    :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': savingContent }]"
                     title="Save"
                   >
                     <span v-if="savingContent" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
@@ -2980,7 +2991,7 @@ onUnmounted(() => {
                   <button
                     v-if="isMarkdownFile && editorMode === 'editor'"
                     @click="openMarkdownPreview"
-                    class="p-1.5 rounded-lg hover:bg-sub transition-colors"
+                    class="p-0 rounded-lg hover:bg-sub transition-colors"
                     title="Preview Markdown"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">

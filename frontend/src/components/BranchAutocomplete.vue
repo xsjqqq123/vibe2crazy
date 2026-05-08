@@ -168,18 +168,18 @@ onClickOutside(wrapperRef, () => {
       aria-controls="branch-listbox"
       @keydown="handleKeydown"
       @blur="handleBlur"
-      class="flex-1 px-3 py-2 border border-gray-300 dark:border-dark-700 rounded-l-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-dark-800 dark:text-gray-100 dark:placeholder-gray-500 disabled:bg-gray-100 dark:disabled:bg-dark-900 disabled:cursor-not-allowed"
+      class="flex-1 px-3 py-2 border border-main bg-main rounded-l-md shadow-sm text-main placeholder:text-sub focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent disabled:bg-gray-100 disabled:cursor-not-allowed"
     />
     <button
       type="button"
       @click="toggleDropdown"
       :disabled="disabled || branches.length === 0"
-      class="px-3 py-2 border border-l-0 border-gray-300 dark:border-dark-700 bg-gray-50 dark:bg-dark-700 rounded-r-md shadow-sm hover:bg-gray-100 dark:hover:bg-dark-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-dark-900 disabled:cursor-not-allowed disabled:opacity-50"
+      class="px-3 py-2 border border-l-0 border-main bg-sub rounded-r-md shadow-sm hover:bg-tertiary focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
       title="Select branch"
     >
       <svg
         v-if="loading"
-        class="animate-spin h-4 w-4 text-gray-500 dark:text-gray-300"
+        class="animate-spin h-4 w-4 text-sub"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -200,7 +200,7 @@ onClickOutside(wrapperRef, () => {
       </svg>
       <svg
         v-else
-        class="h-4 w-4 text-gray-500 dark:text-gray-300"
+        class="h-4 w-4 text-sub"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -221,7 +221,7 @@ onClickOutside(wrapperRef, () => {
       ref="dropdownRef"
       role="listbox"
       id="branch-listbox"
-      class="absolute z-10 w-full top-full bg-white dark:bg-dark-800 border border-gray-300 dark:border-dark-700 rounded-md shadow-lg max-h-60 overflow-auto"
+      class="absolute z-10 w-full top-full bg-main border border-main rounded-md shadow-lg max-h-60 overflow-auto"
     >
       <ul class="py-1">
         <li
@@ -231,15 +231,15 @@ onClickOutside(wrapperRef, () => {
           :aria-selected="branch === query"
           @click="selectBranch(branch)"
           @mousedown.prevent
-          class="px-3 py-2 cursor-pointer transition-colors"
+          class="px-3 py-2 cursor-pointer transition-colors text-sm"
           :class="{
-            'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300': index === highlightedIndex,
-            'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700': index !== highlightedIndex,
+            'item-selected': index === highlightedIndex,
+            'text-main hover:bg-sub': index !== highlightedIndex,
             'font-semibold': branch === currentBranch
           }"
         >
           {{ branch }}
-          <span v-if="branch === currentBranch" class="text-xs text-gray-500 dark:text-gray-400 ml-1">(current)</span>
+          <span v-if="branch === currentBranch" class="text-xs text-sub ml-1">(current)</span>
         </li>
       </ul>
     </div>

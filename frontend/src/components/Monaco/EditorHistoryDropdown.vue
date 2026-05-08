@@ -48,11 +48,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="editor-history-dropdown relative">
+  <div class="editor-history-dropdown relative flex items-center">
     <!-- History dropdown toggle -->
     <button
       v-if="history.length > 0"
-      class="p-1.5 rounded-lg hover:bg-sub transition-colors"
+      class="p-0 rounded-lg hover:bg-sub transition-colors"
       :title="'Recent files (' + history.length + ')'"
       @click.stop="showDropdown = !showDropdown"
     >
@@ -99,6 +99,6 @@ onUnmounted(() => {
 
 <style scoped>
 .editor-history-dropdown {
-  display: inline-block;
+  display: flex;
 }
 </style>

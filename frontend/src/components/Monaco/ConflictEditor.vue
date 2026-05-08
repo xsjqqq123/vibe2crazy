@@ -598,7 +598,7 @@ defineExpose({
         <button
           @click="goToPrevConflict"
           :disabled="!hasUnresolvedConflicts"
-          :class="['p-1.5 rounded-lg conflict-toolbar-btn', { 'opacity-50 cursor-not-allowed': !hasUnresolvedConflicts }]"
+          :class="['p-0 rounded-lg conflict-toolbar-btn', { 'opacity-50 cursor-not-allowed': !hasUnresolvedConflicts }]"
           title="Previous conflict"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 conflict-toolbar-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -608,7 +608,7 @@ defineExpose({
         <button
           @click="goToNextConflict"
           :disabled="!hasUnresolvedConflicts"
-          :class="['p-1.5 rounded-lg conflict-toolbar-btn', { 'opacity-50 cursor-not-allowed': !hasUnresolvedConflicts }]"
+          :class="['p-0 rounded-lg conflict-toolbar-btn', { 'opacity-50 cursor-not-allowed': !hasUnresolvedConflicts }]"
           title="Next conflict"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 conflict-toolbar-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">

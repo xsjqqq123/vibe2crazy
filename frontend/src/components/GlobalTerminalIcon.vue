@@ -7,7 +7,7 @@ const store = useGlobalTerminalStore()
 <template>
   <button
     @click="store.toggle()"
-    class="p-1.5 rounded-lg hover:bg-sub"
+    class="p-0 rounded-lg hover:bg-sub"
     title="Global Terminal"
   >
     <svg
