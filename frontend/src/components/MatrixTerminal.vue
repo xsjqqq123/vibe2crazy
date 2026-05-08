@@ -228,8 +228,23 @@ const connect = () => {
     fitAddon.value.fit()
   }
 
-  // Get initial size
-  const initialSize = xterm.value ? { cols: xterm.value.cols, rows: xterm.value.rows } : undefined
+  // Get initial size - validate minimum dimensions to avoid wrong PTY size
+  const MIN_COLS = 20
+  const MIN_ROWS = 15
+  let initialSize: { cols: number; rows: number } | undefined = undefined
+
+  if (xterm.value) {
+    const cols = xterm.value.cols
+    const rows = xterm.value.rows
+    // Only pass initial size if dimensions are reasonable (container has expanded)
+    if (cols >= MIN_COLS && rows >= MIN_ROWS) {
+      initialSize = { cols, rows }
+    } else {
+      // Dimensions too small - container may not have expanded yet
+      // Connect without initial size (backend defaults), resize will be sent later
+      console.log(`[MatrixTerminal] Dimensions too small (${cols}x${rows}), connecting without initial size`)
+    }
+  }
 
   const wsUrl = getWsUrl(initialSize)
   if (!wsUrl) {

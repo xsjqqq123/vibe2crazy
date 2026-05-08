@@ -313,6 +313,11 @@ class GitService:
                 status_code = line[:2]  # First two characters are status codes
                 filepath = line[3:]     # Skip two status chars + space to get filename
 
+                # Git wraps filenames with special chars (spaces, quotes) in double quotes
+                # Remove surrounding quotes if present
+                if filepath.startswith('"') and filepath.endswith('"'):
+                    filepath = filepath[1:-1]
+
                 # Handle renamed files: R  old -> new
                 if " -> " in filepath:
                     filepath = filepath.split(" -> ")[-1]

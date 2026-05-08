@@ -53,52 +53,67 @@ export interface TempUploadResponse {
 
 type ProgressCallback = (progress: { loaded: number; total: number }) => void
 
+// Helper to encode file path for URL (preserves '/' separators)
+const encodeFilePath = (filePath: string) => filePath.split('/').map(encodeURIComponent).join('/')
+
 const filesApi = {
   list: (taskId: string, path?: string) =>
     request<FileNode[]>(`/tasks/${taskId}/files${path ? `?path=${encodeURIComponent(path)}` : ''}`),
 
   read: (taskId: string, filePath: string) => {
-    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/')
+    const encodedPath = encodeFilePath(filePath)
     return request<{ content: string; hash: string | null }>(`/tasks/${taskId}/files/${encodedPath}`)
   },
 
   getHash: (taskId: string, filePath: string) => {
-    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/')
+    const encodedPath = encodeFilePath(filePath)
     return request<{ hash: string }>(`/tasks/${taskId}/files/${encodedPath}/hash`)
   },
 
-  write: (taskId: string, filePath: string, content: string) =>
-    request(`/tasks/${taskId}/files/${filePath}`, {
+  write: (taskId: string, filePath: string, content: string) => {
+    const encodedPath = encodeFilePath(filePath)
+    return request(`/tasks/${taskId}/files/${encodedPath}`, {
       method: 'PUT',
       body: JSON.stringify({ content })
-    }),
+    })
+  },
 
   getChangedFiles: (taskId: string, page: number = 1, pageSize: number = 20) =>
     request<PaginatedChangedFilesResponse>(`/tasks/${taskId}/changed-files?page=${page}&page_size=${pageSize}`),
 
-  getOriginal: (taskId: string, filePath: string) =>
-    request<{ content: string }>(`/tasks/${taskId}/original/${filePath}`),
+  getOriginal: (taskId: string, filePath: string) => {
+    const encodedPath = encodeFilePath(filePath)
+    return request<{ content: string }>(`/tasks/${taskId}/original/${encodedPath}`)
+  },
 
-  getDiff: (taskId: string, filePath: string) =>
-    request<{ diff: string }>(`/tasks/${taskId}/diff/${filePath}`),
+  getDiff: (taskId: string, filePath: string) => {
+    const encodedPath = encodeFilePath(filePath)
+    return request<{ diff: string }>(`/tasks/${taskId}/diff/${encodedPath}`)
+  },
 
-  deleteFile: (taskId: string, filePath: string) =>
-    request<{ success: boolean }>(`/tasks/${taskId}/files/${filePath}`, {
+  deleteFile: (taskId: string, filePath: string) => {
+    const encodedPath = encodeFilePath(filePath)
+    return request<{ success: boolean }>(`/tasks/${taskId}/files/${encodedPath}`, {
       method: 'DELETE'
-    }),
+    })
+  },
 
-  revertFile: (taskId: string, filePath: string) =>
-    request<{ success: boolean; message: string; is_tracked: boolean }>(`/tasks/${taskId}/revert/${filePath}`, {
+  revertFile: (taskId: string, filePath: string) => {
+    const encodedPath = encodeFilePath(filePath)
+    return request<{ success: boolean; message: string; is_tracked: boolean }>(`/tasks/${taskId}/revert/${encodedPath}`, {
       method: 'POST'
-    }),
+    })
+  },
 
-  stageFile: (taskId: string, filePath: string) =>
-    request<{ success: boolean; message: string }>(`/tasks/${taskId}/stage/${filePath}`, {
+  stageFile: (taskId: string, filePath: string) => {
+    const encodedPath = encodeFilePath(filePath)
+    return request<{ success: boolean; message: string }>(`/tasks/${taskId}/stage/${encodedPath}`, {
       method: 'POST'
-    }),
+    })
+  },
 
   getRawFile: (taskId: string, filePath: string, onProgress?: ProgressCallback) => {
-    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/')
+    const encodedPath = encodeFilePath(filePath)
     if (onProgress) {
       return requestBlobWithProgress(`/tasks/${taskId}/files/${encodedPath}?raw=true`, onProgress)
     }
@@ -198,7 +213,8 @@ const filesApi = {
 
   downloadFile: (taskId: string, filePath: string) => {
     const token = localStorage.getItem('auth_token')
-    const url = `${import.meta.env.VITE_API_BASE || '/api'}/tasks/${taskId}/files/${filePath}/download`
+    const encodedPath = encodeFilePath(filePath)
+    const url = `${import.meta.env.VITE_API_BASE || '/api'}/tasks/${taskId}/files/${encodedPath}/download`
     const headers: Record<string, string> = {}
     if (token) {
       headers['Authorization'] = `Bearer ${token}`

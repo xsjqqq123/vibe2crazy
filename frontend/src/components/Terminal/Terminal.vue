@@ -317,6 +317,11 @@ const initTerminal = () => {
     fitAddon.value.fit()
     const { cols, rows } = xterm.value
 
+    // Minimum acceptable size for terminal (prevent connecting with wrong dimensions)
+    // These thresholds indicate the container has actually expanded, not stuck at initial small size
+    const MIN_COLS = 20
+    const MIN_ROWS = 15
+
     // If size changed, restart debounce timer
     if (cols !== lastCheckedDims.cols || rows !== lastCheckedDims.rows) {
       lastCheckedDims = { cols, rows }
@@ -325,8 +330,17 @@ const initTerminal = () => {
       return
     }
 
-    // Size stable for 300ms — connect now
-    console.log(`[Terminal] Layout stable, connecting: ${cols}x${rows}`)
+    // If dimensions are too small, wait for container to expand
+    // This handles the race condition where splitpanes pane hasn't fully expanded yet
+    if (cols < MIN_COLS || rows < MIN_ROWS) {
+      console.log(`[Terminal] Dimensions too small (${cols}x${rows}), waiting for container to expand...`)
+      if (stableTimer) clearTimeout(stableTimer)
+      stableTimer = setTimeout(checkAndConnect, 300)
+      return
+    }
+
+    // Size stable for 300ms AND has reasonable dimensions — connect now
+    console.log(`[Terminal] Layout stable with valid dimensions, connecting: ${cols}x${rows}`)
     initialResizeDone = true
     stableTimer = null
 
