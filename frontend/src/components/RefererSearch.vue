@@ -28,6 +28,17 @@ const emit = defineEmits<{
 const perPage = 20
 const loading = ref(false)
 const hasSearched = ref(false)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+
+// Focus the search input
+const focusInput = () => {
+  if (searchInputRef.value) {
+    searchInputRef.value.focus()
+  }
+}
+
+// Expose focusInput for parent component to call
+defineExpose({ focusInput })
 
 // Use computed setters for two-way binding
 const queryModel = computed({
@@ -217,6 +228,7 @@ const highlightMatch = (content: string) => {
           <path d="m21 21-4.35-4.35"/>
         </svg>
         <input
+          ref="searchInputRef"
           v-model="queryModel"
           type="text"
           placeholder="Search in project..."

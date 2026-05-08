@@ -217,7 +217,7 @@ onUnmounted(() => {
           <!-- Footer -->
           <div class="file-quick-jump-footer">
             <span class="file-quick-jump-hint">
-              <kbd>↑</kbd> <kbd>↓</kbd> Navigate · <kbd>Enter</kbd> Open · <kbd>中键</kbd> Preview · <kbd>ESC</kbd> Close
+              <kbd>↑</kbd> <kbd>↓</kbd> Navigate · <kbd>Enter</kbd> Open · <kbd>Middle</kbd> Preview · <kbd>ESC</kbd> Close
             </span>
             <span class="file-quick-jump-count">
               {{ results.length }} result{{ results.length !== 1 ? 's' : '' }}

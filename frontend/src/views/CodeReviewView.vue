@@ -319,6 +319,7 @@ const editorRef = ref<InstanceType<typeof MonacoEditor> | null>(null)
 const outlineRef = ref<InstanceType<typeof SymbolOutline> | null>(null)
 const preview1Ref = ref<InstanceType<typeof EditorView> | null>(null)
 const preview2Ref = ref<InstanceType<typeof EditorView> | null>(null)
+const refererSearchRef = ref<InstanceType<typeof RefererSearch> | null>(null)
 
 const restoreEditorPosition = (viewState: EditorViewState, entry: HistoryEntry) => {
   // entry contains the actual position data to restore
@@ -1110,10 +1111,22 @@ const handleSearchSelect = async (filePath: string, lineNumber: number) => {
 const handleFindReferences = (selectedText: string) => {
   refererQuery.value = selectedText
   activeFilesTab.value = 'referer'
-  // Trigger search after tab switches to 'referer'
+  // Trigger search and focus input after tab switches to 'referer'
   nextTick(() => {
+    if (refererSearchRef.value) {
+      refererSearchRef.value.focusInput()
+    }
     const searchBtn = document.querySelector('.referer-search .search-btn') as HTMLButtonElement
     if (searchBtn) searchBtn.click()
+  })
+}
+
+const handleReferTabClick = () => {
+  activeFilesTab.value = 'referer'
+  nextTick(() => {
+    if (refererSearchRef.value) {
+      refererSearchRef.value.focusInput()
+    }
   })
 }
 
@@ -2653,7 +2666,7 @@ onUnmounted(() => {
                     Files
                   </button>
                   <button
-                    @click="activeFilesTab = 'referer'"
+                    @click="handleReferTabClick"
                     :class="activeFilesTab === 'referer' ? 'tab-active' : 'border-transparent text-sub hover:text-main'"
                     class="text-sm font-medium px-2 py-1 border-b-2"
                   >
@@ -2692,6 +2705,7 @@ onUnmounted(() => {
                 </div>
                 <div class="absolute inset-0 overflow-y-auto" v-show="activeFilesTab === 'referer'">
                   <RefererSearch
+                    ref="refererSearchRef"
                     :task-id="taskId"
                     :worktree-path="task?.worktree_path || ''"
                     :current-file="currentFile || ''"

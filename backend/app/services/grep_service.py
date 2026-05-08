@@ -92,7 +92,7 @@ class GrepService:
             # 执行 ripgrep
             try:
                 cmd = [
-                    "rg", "--json", "-n",
+                    "rg", "--json", "-n", "-i",
                     "-g", "!node_modules",
                     "-g", "!node_modules/**",
                     "-g", "!.git",
