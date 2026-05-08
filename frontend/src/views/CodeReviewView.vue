@@ -754,6 +754,7 @@ const {
   loadingPaths,
   expandedDirs,
   loadRoot,
+  reloadPreservingState,
   expandDir,
   collapseDir,
   getNode,
@@ -1063,6 +1064,29 @@ const loadFileTree = async () => {
     console.log('[CodeReviewView] loadFileTree: rootPaths =', rootPaths.value, 'nodes size =', nodes.value.size)
   } catch (err: any) {
     console.error('Failed to load file tree:', err)
+  }
+}
+
+// Refresh file tree preserving expand state and scroll position
+const refreshFileTree = async () => {
+  if (!taskId.value) return
+
+  // Save scroll position
+  const fileTreeEl = document.querySelector('.file-tree')
+  const scrollTop = fileTreeEl?.scrollTop || 0
+
+  try {
+    await reloadPreservingState()
+    console.log('[CodeReviewView] refreshFileTree: preserved expanded dirs')
+
+    // Restore scroll position after DOM updates
+    nextTick(() => {
+      if (fileTreeEl) {
+        fileTreeEl.scrollTop = scrollTop
+      }
+    })
+  } catch (err: any) {
+    console.error('Failed to refresh file tree:', err)
   }
 }
 
@@ -2642,7 +2666,7 @@ onUnmounted(() => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                   </button>
-                  <button @click="loadFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
+                  <button @click="refreshFileTree()" class="text-gray-500 hover:text-gray-700 dark:text-dark-500 dark:hover:text-dark-300" title="Refresh">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
@@ -2664,7 +2688,7 @@ onUnmounted(() => {
                     @preview-file="handleFilePreview"
                     @show-context-menu="handleShowContextMenu"
                   />
-                  <div v-if="rootPaths.length === 0" class="text-xs text-sub py-2">No files found (rootPaths empty)</div>
+                  <div v-if="rootPaths.length === 0" class="text-sm text-sub py-2">No files found (rootPaths empty)</div>
                 </div>
                 <div class="absolute inset-0 overflow-y-auto" v-show="activeFilesTab === 'referer'">
                   <RefererSearch
@@ -2746,7 +2770,7 @@ onUnmounted(() => {
                 <div v-if="initialLoading" class="flex items-center justify-center py-4">
                   <div class="spinner"></div>
                 </div>
-                <div v-else-if="changedFiles.length === 0" class="text-xs text-sub py-2">
+                <div v-else-if="changedFiles.length === 0" class="text-sm text-sub py-2">
                   No changes detected
                 </div>
                 <div v-else class="space-y-1" @click="closeContextMenuOnClick">
@@ -2758,7 +2782,7 @@ onUnmounted(() => {
                     @touchstart="(e) => handleChangedFilesTouchStart(e, file.path)"
                     @touchend="handleChangedFilesTouchEnd"
                     @touchmove="handleChangedFilesTouchMove"
-                    :class="['text-xs px-2 py-1 rounded cursor-pointer hover:bg-sub flex items-center justify-between gap-2', currentFile === file.path && editorMode === 'diff' ? 'item-selected' : '']"
+                    :class="['text-sm px-2 py-1.5 rounded cursor-pointer hover:bg-sub flex items-center justify-between gap-2', currentFile === file.path && editorMode === 'diff' ? 'item-selected' : '']"
                     :title="file.path"
                   >
                     <span :class="['truncate flex-1', currentFile === file.path && editorMode === 'diff' ? 'text-main font-medium' : 'text-green-600 dark:text-green-400']">{{ file.path }}</span>
@@ -2813,13 +2837,13 @@ onUnmounted(() => {
             <div class="p-4 flex-1 overflow-y-auto min-h-0">
               <div class="flex items-center justify-between mb-2">
                 <h3 class="text-sm font-semibold text-main">Tasks</h3>
-                <button @click="showCreateDialog = true" class="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500">+ New</button>
+                <button @click="showCreateDialog = true" class="text-sm text-accent hover:text-accent">+ New</button>
               </div>
 
               <div v-if="tasksLoading" class="flex items-center justify-center py-4">
                 <div class="spinner"></div>
               </div>
-              <div v-else-if="tasks.length === 0" class="text-xs text-sub py-2 text-center">
+              <div v-else-if="tasks.length === 0" class="text-sm text-sub py-2 text-center">
                 No tasks
               </div>
               <div v-else class="space-y-1">
@@ -2942,7 +2966,7 @@ onUnmounted(() => {
                   <button
                     v-if="isMarkdownFile && editorMode === 'editor'"
                     @click="openMarkdownPreview"
-                    class="p-1.5 rounded-lg hover:bg-sub"
+                    class="p-1.5 rounded-lg hover:bg-sub transition-colors"
                     title="Preview Markdown"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">

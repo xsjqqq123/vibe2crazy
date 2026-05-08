@@ -395,7 +395,7 @@ defineExpose({
 
 .symbol-outline {
   border-top: 1px solid var(--border-color);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .outline-header {
@@ -415,7 +415,7 @@ defineExpose({
 }
 
 .outline-toggle {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-muted);
   width: 16px;
 }
@@ -423,14 +423,14 @@ defineExpose({
 .outline-title {
   color: var(--text-primary);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .outline-count {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .outline-index {
@@ -439,8 +439,8 @@ defineExpose({
   border-radius: 3px;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 11px;
+  padding: 2px 8px;
+  font-size: 12px;
   line-height: 1;
   transition: all 0.15s ease;
   margin-left: 4px;
@@ -465,8 +465,8 @@ defineExpose({
   border-radius: 3px;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 11px;
+  padding: 2px 8px;
+  font-size: 12px;
   line-height: 1;
   transition: all 0.15s ease;
   touch-action: manipulation;
@@ -513,7 +513,7 @@ defineExpose({
   padding: 4px 8px;
   border-radius: 4px;
   margin-bottom: 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .error-dismiss {
@@ -528,7 +528,7 @@ defineExpose({
 .no-symbols {
   color: var(--text-muted);
   font-style: italic;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .symbol-tags {
@@ -547,7 +547,8 @@ defineExpose({
   border-radius: 4px;
   padding: 4px 8px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 500;
   transition: background 0.15s ease, border-color 0.15s ease;
   touch-action: manipulation;
 }
@@ -579,18 +580,19 @@ defineExpose({
 }
 
 .symbol-icon {
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.8;
 }
 
 .symbol-name {
   font-family: monospace;
   color: var(--text-primary);
+  font-weight: 500;
 }
 
 .symbol-line {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 11px;
   margin-left: 2px;
 }
 
@@ -598,7 +600,7 @@ defineExpose({
 .preview-panel {
   background: var(--bg-primary);
   border-top: 1px solid var(--border-color);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .preview-panel.is-collapsed .preview-content {
@@ -622,13 +624,13 @@ defineExpose({
 }
 
 .preview-toggle {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-muted);
   width: 16px;
 }
 
 .preview-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
   text-transform: uppercase;
@@ -637,7 +639,8 @@ defineExpose({
 
 .preview-name {
   font-family: monospace;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
   margin-left: auto;
 }
@@ -672,7 +675,7 @@ defineExpose({
 .preview-not-found,
 .preview-empty {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 13px;
   font-style: italic;
 }
 
@@ -692,8 +695,9 @@ defineExpose({
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 3px;
-  padding: 2px 6px;
-  font-size: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
   font-family: monospace;
 }
@@ -717,7 +721,8 @@ defineExpose({
 .preview-snippet pre {
   margin: 0;
   font-family: monospace;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.5;
   color: var(--text-primary);
 }
@@ -772,7 +777,7 @@ defineExpose({
 }
 
 .location-text {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
@@ -789,7 +794,7 @@ defineExpose({
 }
 
 .matches-list-compact.is-collapsed {
-  max-height: calc(2 * 24px);
+  max-height: calc(2 * 26px);
   overflow: hidden;
 }
 
@@ -799,7 +804,7 @@ defineExpose({
   padding: 0;
   background: transparent;
   border: none;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
@@ -818,9 +823,10 @@ defineExpose({
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 3px;
-  padding: 2px 6px;
+  padding: 3px 8px;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 500;
   transition: all 0.15s ease;
   touch-action: manipulation;
 }
@@ -852,14 +858,15 @@ defineExpose({
 }
 
 .match-kind-small {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
 }
 
 .match-file-small {
   font-family: monospace;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-primary);
 }
 

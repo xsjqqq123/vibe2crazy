@@ -37,7 +37,7 @@ def _create_direct_task(db: Session, project_id: str, project_name: str, git_pat
     db_task = Task(
         id=task_id,
         project_id=project_id,
-        name="Direct",
+        name=project_name,
         branch_name=branch_name,
         worktree_path=git_path,
         tmux_session=tmux_session,

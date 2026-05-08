@@ -15,6 +15,7 @@ const createMockFileTree = (): UseFileTreeReturn => ({
   loadingPaths: ref(new Set<string>()),
   expandedDirs: ref(new Set<string>()),
   loadRoot: async () => {},
+  reloadPreservingState: async () => {},
   expandDir: async () => {},
   collapseDir: () => {},
   getNode: (path: string) => {

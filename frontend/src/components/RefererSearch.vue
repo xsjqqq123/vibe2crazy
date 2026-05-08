@@ -238,7 +238,7 @@ const highlightMatch = (content: string) => {
     </div>
 
     <!-- Results Summary -->
-    <div v-if="total > 0" class="results-summary mb-2 text-xs text-sub">
+    <div v-if="total > 0" class="results-summary mb-2 text-sm text-sub">
       <span class="count-number">{{ totalMatches.toLocaleString() }}</span> matches · Page {{ page }} of {{ totalPages.toLocaleString() }}
     </div>
 
@@ -248,11 +248,11 @@ const highlightMatch = (content: string) => {
     </div>
 
     <!-- Empty States -->
-    <div v-else-if="results.length === 0 && hasSearched" class="text-xs text-sub py-2">
+    <div v-else-if="results.length === 0 && hasSearched" class="text-sm text-sub py-2">
       No matches found
     </div>
 
-    <div v-else-if="results.length === 0 && !hasSearched" class="text-xs text-sub py-2">
+    <div v-else-if="results.length === 0 && !hasSearched" class="text-sm text-sub py-2">
       Type to search across all project files
     </div>
 
@@ -270,17 +270,17 @@ const highlightMatch = (content: string) => {
           @click="toggleFile(group.file)"
         >
           <div class="flex items-center gap-2 min-w-0 flex-1">
-            <svg class="w-3.5 h-3.5 text-sub flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg class="w-4 h-4 text-sub flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <path d="M14 2v6h6"/>
             </svg>
             <div class="min-w-0">
-              <div class="file-name text-xs font-medium truncate">{{ getFileName(group.file) }}</div>
+              <div class="file-name text-sm font-medium truncate">{{ getFileName(group.file) }}</div>
               <div class="file-dir text-xs text-sub truncate">{{ getFileDir(group.file) }}</div>
             </div>
           </div>
           <svg
-            class="w-3.5 h-3.5 text-sub transition-transform flex-shrink-0"
+            class="w-4 h-4 text-sub transition-transform flex-shrink-0"
             :class="{ 'rotate-180': expandedFiles.has(group.file) }"
             viewBox="0 0 24 24"
             fill="none"
@@ -297,7 +297,7 @@ const highlightMatch = (content: string) => {
             <div
               v-for="match in group.matches"
               :key="`${match.file}:${match.line}`"
-              class="match-item px-3 py-1 text-xs cursor-pointer hover:bg-sub transition-colors"
+              class="match-item px-3 py-1 text-sm cursor-pointer hover:bg-sub transition-colors"
               @click="handleResultClick(match)"
               @mousedown="handleMiddleClick($event, match)"
             >
@@ -314,20 +314,24 @@ const highlightMatch = (content: string) => {
 
     <!-- Pagination -->
     <div v-if="total > 0" class="pagination flex items-center justify-between mt-3 pt-2 border-t border-main">
-      <span class="text-xs text-sub">Showing {{ startIndex }}-{{ endIndex }}</span>
+      <span class="text-sm text-sub">Showing {{ startIndex }}-{{ endIndex }}</span>
       <div class="flex items-center gap-1">
         <button
           @click="prevPage"
           :disabled="page <= 1"
-          class="btn btn-secondary text-xs px-2 py-1"
+          class="px-2 py-0.5 rounded border border-main bg-main hover:bg-sub
+                 disabled:opacity-50 disabled:cursor-not-allowed
+                 transition-colors text-sm text-main"
         >
           Prev
         </button>
-        <span class="text-xs text-sub px-2">{{ page }}/{{ totalPages }}</span>
+        <span class="text-sm text-sub px-2">{{ page }}/{{ totalPages }}</span>
         <button
           @click="nextPage"
           :disabled="page >= totalPages"
-          class="btn btn-secondary text-xs px-2 py-1"
+          class="px-2 py-0.5 rounded border border-main bg-main hover:bg-sub
+                 disabled:opacity-50 disabled:cursor-not-allowed
+                 transition-colors text-sm text-main"
         >
           Next
         </button>

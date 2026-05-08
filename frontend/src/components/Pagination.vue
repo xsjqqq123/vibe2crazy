@@ -56,24 +56,23 @@ function goToPage(pageNum: number | string) {
       <button
         @click="goToPage(page - 1)"
         :disabled="page === 1"
-        class="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600
-               hover:bg-gray-100 dark:hover:bg-gray-700
+        class="px-2 py-0.5 rounded border border-main bg-main hover:bg-sub
                disabled:opacity-50 disabled:cursor-not-allowed
-               transition-colors text-xs"
+               transition-colors text-sm text-main"
       >
         Previous
       </button>
 
       <template v-for="p in pageNumbers" :key="p">
-        <span v-if="p === '...'" class="px-1.5 text-xs">...</span>
+        <span v-if="p === '...'" class="px-1.5 text-sm">...</span>
         <button
           v-else
           @click="goToPage(p)"
           :class="[
-            'px-2 py-0.5 rounded border transition-colors text-xs',
+            'px-2 py-0.5 rounded border transition-colors text-sm',
             page === p
-              ? 'bg-blue-500 text-white border-blue-500'
-              : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+              ? 'bg-accent text-white border-accent'
+              : 'border-main bg-main hover:bg-sub text-main'
           ]"
         >
           {{ p }}
@@ -83,16 +82,15 @@ function goToPage(pageNum: number | string) {
       <button
         @click="goToPage(page + 1)"
         :disabled="page === totalPages || totalPages === 0"
-        class="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600
-               hover:bg-gray-100 dark:hover:bg-gray-700
+        class="px-2 py-0.5 rounded border border-main bg-main hover:bg-sub
                disabled:opacity-50 disabled:cursor-not-allowed
-               transition-colors text-xs"
+               transition-colors text-sm text-main"
       >
         Next
       </button>
     </div>
 
-    <div class="text-xs text-gray-500 dark:text-gray-300">
+    <div class="text-sm text-sub">
       Showing {{ total > 0 ? (page - 1) * pageSize + 1 : 0 }}-{{ Math.min(page * pageSize, total) }}
       of {{ total }} commits
     </div>

@@ -27,6 +27,7 @@ export interface UseFileTreeReturn {
   loadingPaths: Ref<Set<string>>
   expandedDirs: Ref<Set<string>>
   loadRoot: () => Promise<void>
+  reloadPreservingState: () => Promise<void>
   expandDir: (path: string) => Promise<void>
   collapseDir: (path: string) => void
   getNode: (path: string) => FileNode | undefined
@@ -73,6 +74,43 @@ export function useFileTree(taskId: Ref<string>): UseFileTreeReturn {
     } catch (err: any) {
       nodes.value = previousNodes  // Restore on error
       console.error('Failed to load file tree:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Reload file tree while preserving expanded directories
+  const reloadPreservingState = async () => {
+    // Save current expanded directories
+    const expandedPaths = Array.from(expandedDirs.value)
+
+    loading.value = true
+    try {
+      const tree = await filesApi.list(taskId.value)
+
+      // Convert to flat structure
+      nodes.value.clear()
+      tree.forEach(node => {
+        const fileNode = toFileNode(node)
+        nodes.value.set(fileNode.path, fileNode)
+      })
+      rootPaths.value = tree.map(n => n.path)
+
+      // Re-expand previously expanded directories
+      // Process from shallowest to deepest to maintain hierarchy
+      expandedPaths.sort((a, b) => a.split('/').length - b.split('/').length)
+      for (const path of expandedPaths) {
+        // Check if path still exists
+        if (nodes.value.has(path)) {
+          await expandDir(path)
+        } else {
+          // Path no longer exists, remove from expandedDirs
+          expandedDirs.value.delete(path)
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to reload file tree:', err)
       throw err
     } finally {
       loading.value = false
@@ -163,6 +201,7 @@ export function useFileTree(taskId: Ref<string>): UseFileTreeReturn {
     loadingPaths,
     expandedDirs,
     loadRoot,
+    reloadPreservingState,
     expandDir,
     collapseDir,
     getNode,

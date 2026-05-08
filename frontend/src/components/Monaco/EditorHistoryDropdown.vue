@@ -52,13 +52,13 @@ onUnmounted(() => {
     <!-- History dropdown toggle -->
     <button
       v-if="history.length > 0"
-      class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+      class="p-1.5 rounded-lg hover:bg-sub transition-colors"
       :title="'Recent files (' + history.length + ')'"
       @click.stop="showDropdown = !showDropdown"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        class="h-4 w-4 text-muted"
+        class="h-5 w-5 text-sub"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -75,20 +75,20 @@ onUnmounted(() => {
     <!-- History dropdown panel -->
     <div
       v-if="showDropdown && history.length > 0"
-      class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 border border-main rounded-md shadow-lg z-50 max-h-64 overflow-y-auto"
+      class="absolute right-0 top-full mt-1 w-64 bg-main border border-main rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto"
     >
       <div class="py-1">
         <div
           v-for="entry in sortedHistory"
           :key="entry.filePath + entry.timestamp"
-          class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-          :class="{ 'bg-blue-50 dark:bg-blue-900/20': entry.filePath === currentFile }"
+          class="px-3 py-2 hover:bg-sub cursor-pointer"
+          :class="{ 'item-selected': entry.filePath === currentFile }"
           @click.stop="handleSelect(entry)"
         >
           <div class="text-sm font-medium text-main truncate">
             {{ getFileName(entry.filePath) }}
           </div>
-          <div class="text-xs text-muted truncate">
+          <div class="text-xs text-sub truncate">
             {{ entry.filePath }}
           </div>
         </div>

@@ -96,12 +96,12 @@ const handleContextMenu = (e: MouseEvent, commit: CommitInfo) => {
     </div>
 
     <!-- Error state -->
-    <div v-else-if="error" class="text-xs text-red-600 py-2">
+    <div v-else-if="error" class="text-sm text-red-600 py-2">
       {{ error }}
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="commits.length === 0" class="text-xs text-muted py-2">
+    <div v-else-if="commits.length === 0" class="text-sm text-muted py-2">
       No commits yet
     </div>
 
@@ -144,10 +144,6 @@ const handleContextMenu = (e: MouseEvent, commit: CommitInfo) => {
 </template>
 
 <style scoped>
-.commits-list {
-  font-size: 12px;
-}
-
 .file-status {
   display: inline-block;
   width: 12px;
