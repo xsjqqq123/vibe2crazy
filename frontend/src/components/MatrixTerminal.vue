@@ -566,6 +566,8 @@ const initTerminal = () => {
 
     // Immediately reconnect if connected or connecting
     if (connected.value || connecting.value) {
+      // Mark as intentional to prevent onclose auto-reconnect
+      isIntentionalClose = true
       if (ws.value) {
         ws.value.close()
         ws.value = null
@@ -577,6 +579,8 @@ const initTerminal = () => {
       if (token.value) {
         setTimeout(() => {
           xterm.value?.writeln('\x1b[33mReconnecting...\x1b[0m')
+          // Reset isIntentionalClose for the new connection
+          isIntentionalClose = false
           connect()
         }, 100)
       }

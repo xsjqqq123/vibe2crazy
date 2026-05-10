@@ -40,6 +40,7 @@ const store = useMainStore()
 
 const containerRef = ref<HTMLElement | null>(null)
 let editor: any = null
+let model: any = null
 let focusInterceptor: ((e: Event) => void) | null = null
 
 const currentLanguage = computed(() => {
@@ -90,10 +91,28 @@ onMounted(async () => {
     }
   })
 
-  // Create Monaco editor
+  // Wait for container to have proper dimensions before creating editor
+  // This is critical for syntax highlighting - Monaco's tokenizer needs visible dimensions
+  const waitForContainerReady = (): Promise<void> => {
+    return new Promise((resolve) => {
+      const checkDimensions = () => {
+        if (containerRef.value && containerRef.value.offsetWidth > 0 && containerRef.value.offsetHeight > 0) {
+          resolve()
+        } else {
+          requestAnimationFrame(checkDimensions)
+        }
+      }
+      checkDimensions()
+    })
+  }
+
+  await waitForContainerReady()
+
+  // Create Monaco editor with explicit model for better tokenization control
+  model = monaco.editor.createModel(props.modelValue, currentLanguage.value)
+
   editor = monaco.editor.create(containerRef.value, {
-    value: props.modelValue,
-    language: currentLanguage.value,
+    model: model,
     theme: getMonacoTheme(store.theme),
     automaticLayout: true,
     readOnly: props.readOnly,
@@ -104,6 +123,25 @@ onMounted(async () => {
     wordWrap: 'on',
     formatOnPaste: true,
     formatOnType: true
+  })
+
+  // Force layout and tokenization after editor creation
+  // This is needed when the container was previously hidden (v-if) and is now shown
+  requestAnimationFrame(() => {
+    if (editor && model) {
+      editor.layout()
+      // Force tokenization of the entire document
+      // Monaco's tokenizer may not run on hidden/invisible content
+      const lineCount = model.getLineCount()
+      if (lineCount > 0) {
+        // Trigger re-tokenization by briefly changing to plaintext and back
+        const currentLang = model.getLanguageId()
+        monaco.editor.setModelLanguage(model, 'plaintext')
+        requestAnimationFrame(() => {
+          monaco.editor.setModelLanguage(model, currentLang)
+        })
+      }
+    }
   })
 
   // Register Ctrl+S save command (always registered, but checks state before emitting)
@@ -239,6 +277,12 @@ onUnmounted(() => {
   if (editor) {
     editor.dispose()
     editor = null
+  }
+
+  // Dispose the model separately (editor.dispose() doesn't auto-dispose explicit models)
+  if (model) {
+    model.dispose()
+    model = null
   }
 })
 

@@ -190,6 +190,22 @@ onMounted(async () => {
     }
   })
 
+  // Wait for container to have proper dimensions before creating editor
+  const waitForContainerReady = (): Promise<void> => {
+    return new Promise((resolve) => {
+      const checkDimensions = () => {
+        if (containerRef.value && containerRef.value.offsetWidth > 0 && containerRef.value.offsetHeight > 0) {
+          resolve()
+        } else {
+          requestAnimationFrame(checkDimensions)
+        }
+      }
+      checkDimensions()
+    })
+  }
+
+  await waitForContainerReady()
+
   // Create models
   originalModel = monaco.editor.createModel(props.original, currentLanguage.value)
   modifiedModel = monaco.editor.createModel(props.modified, currentLanguage.value)
@@ -213,6 +229,22 @@ onMounted(async () => {
   diffEditor.setModel({
     original: originalModel,
     modified: modifiedModel
+  })
+
+  // Force layout and tokenization after editor creation
+  requestAnimationFrame(() => {
+    if (diffEditor && originalModel && modifiedModel) {
+      diffEditor.layout()
+      // Force re-tokenization for both models
+      const origLang = originalModel.getLanguageId()
+      const modLang = modifiedModel.getLanguageId()
+      monaco.editor.setModelLanguage(originalModel, 'plaintext')
+      monaco.editor.setModelLanguage(modifiedModel, 'plaintext')
+      requestAnimationFrame(() => {
+        monaco.editor.setModelLanguage(originalModel, origLang)
+        monaco.editor.setModelLanguage(modifiedModel, modLang)
+      })
+    }
   })
 
   // Listen for diff update event - this fires when Monaco completes diff computation

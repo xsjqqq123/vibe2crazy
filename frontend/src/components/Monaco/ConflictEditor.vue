@@ -481,6 +481,22 @@ onMounted(async () => {
   // Parse conflicts
   conflicts.value = parseConflicts(props.content)
 
+  // Wait for container to have proper dimensions before creating editor
+  const waitForContainerReady = (): Promise<void> => {
+    return new Promise((resolve) => {
+      const checkDimensions = () => {
+        if (containerRef.value && containerRef.value.offsetWidth > 0 && containerRef.value.offsetHeight > 0) {
+          resolve()
+        } else {
+          requestAnimationFrame(checkDimensions)
+        }
+      }
+      checkDimensions()
+    })
+  }
+
+  await waitForContainerReady()
+
   // Create model
   model = monaco.editor.createModel(props.content, currentLanguage.value)
 
@@ -496,6 +512,19 @@ onMounted(async () => {
     wordWrap: 'on',
     glyphMargin: true,
     folding: false
+  })
+
+  // Force layout and tokenization after editor creation
+  requestAnimationFrame(() => {
+    if (editor && model) {
+      editor.layout()
+      // Force re-tokenization by briefly changing language
+      const currentLang = model.getLanguageId()
+      monaco.editor.setModelLanguage(model, 'plaintext')
+      requestAnimationFrame(() => {
+        monaco.editor.setModelLanguage(model, currentLang)
+      })
+    }
   })
 
   // Update decorations

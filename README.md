@@ -28,6 +28,11 @@ Terminal matrix on desktop:
 - ./vibe2crazy
 - then visit the web page at `localhost:8863`. Change default password when first acess.
 
+### Remote Access
+
+1. After logging in, click "Get token" to obtain the authorization token for remote connection. Currently, it is completely free and will remain so for a long time.
+2. If you think this software is helpful, please consider subscribing to the annual plan to help us purchase more servers and improve the access experience.
+
 ### Create Project
 
 1. Click "New Project"
@@ -56,6 +61,10 @@ Each task creates an independent Git branch and working directory.
 2. View changed files and code differences
 3. Click "Merge" button when ready
 4. Code merges to main branch automatically, task completed
+
+## Designed for code review
+- **Preview1/2** - Click the middle button of the mouse on the file to open the auxiliary preview view on the right.
+- **Symbol** - The symbol view below the editor is used for quickly viewing the function definitions (Click 'Index' button first).
 
 ## Use Cases
 
