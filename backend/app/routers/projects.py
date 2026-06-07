@@ -21,12 +21,12 @@ def _create_direct_task(db: Session, project_id: str, project_name: str, git_pat
     """Create the default Direct task for a newly created project."""
     import uuid
     from app.models import Task, TaskStatus
-    from app.services.tmux_service import TmuxService
+    from app.services.tmux_service import TmuxService, sanitize_session_name
     from app.config import settings
 
     task_id = str(uuid.uuid4())
     branch_name = f"direct-{project_id[:8]}"
-    tmux_session = f"{settings.tmux_session_prefix}{project_name}-{task_id}"
+    tmux_session = sanitize_session_name(f"{settings.tmux_session_prefix}{project_name}-{task_id}")
 
     # Create tmux session pointing to main repo
     tmux_success, tmux_msg = TmuxService.create_session(tmux_session, git_path)

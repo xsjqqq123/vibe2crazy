@@ -8,6 +8,22 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+def sanitize_session_name(name: str) -> str:
+    """Sanitize tmux session name by replacing dots with underscores.
+
+    Tmux uses dots as delimiters for session:window syntax, so dots in
+    session names are automatically converted to underscores by tmux.
+    Pre-sanitizing ensures consistency between database and tmux.
+
+    Args:
+        name: The raw session name (may contain dots)
+
+    Returns:
+        Sanitized session name with dots replaced by underscores
+    """
+    return name.replace(".", "_")
+
+
 def _clean_env_for_subprocess() -> dict:
     """
     Clean environment for subprocess to avoid PyInstaller library pollution.

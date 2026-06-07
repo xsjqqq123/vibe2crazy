@@ -78,7 +78,7 @@ const filesApi = {
     })
   },
 
-  getChangedFiles: (taskId: string, page: number = 1, pageSize: number = 20) =>
+  getChangedFiles: (taskId: string, page: number = 1, pageSize: number = 30) =>
     request<PaginatedChangedFilesResponse>(`/tasks/${taskId}/changed-files?page=${page}&page_size=${pageSize}`),
 
   getOriginal: (taskId: string, filePath: string) => {

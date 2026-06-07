@@ -424,7 +424,7 @@ async def delete_file(
 async def get_changed_files(
     task_id: str,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
+    page_size: int = Query(30, ge=1, le=100, description="Number of items per page"),
     db: DBSession = Depends(get_db),
     current_user: Task = Depends(require_auth)
 ):

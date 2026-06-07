@@ -168,6 +168,12 @@ const handleMiddleClick = (e: MouseEvent, match: SearchMatch) => {
   // Prevent default browser behavior
   e.preventDefault()
 
+  // Blur active element to prevent Monaco editor from receiving
+  // X11 primary selection paste on Linux
+  if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+    (document.activeElement as HTMLElement).blur()
+  }
+
   // Convert absolute path to relative path
   let filePath = match.file
   if (props.worktreePath && filePath.startsWith(props.worktreePath)) {

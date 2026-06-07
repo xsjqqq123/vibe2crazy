@@ -51,6 +51,11 @@ const handleContextMenu = (e: MouseEvent) => {
 const handleMiddleClick = (e: MouseEvent) => {
   if (e.button === 1 && node.value?.type === 'file') {
     e.preventDefault()
+    // Blur active element to prevent Monaco editor from receiving
+    // X11 primary selection paste on Linux
+    if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+      (document.activeElement as HTMLElement).blur()
+    }
     emit('previewFile', props.path)
   }
 }

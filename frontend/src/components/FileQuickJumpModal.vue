@@ -88,6 +88,11 @@ const selectFile = (filePath: string) => {
 const handleMouseDown = (e: MouseEvent, filePath: string) => {
   if (e.button === 1) {  // Middle click
     e.preventDefault()
+    // Blur active element to prevent Monaco editor from receiving
+    // X11 primary selection paste on Linux
+    if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+      (document.activeElement as HTMLElement).blur()
+    }
     emit('preview-file', filePath)
     emit('close')
   }

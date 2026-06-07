@@ -18,6 +18,7 @@ interface Emits {
   (e: 'toggle'): void
   (e: 'previewToggle'): void
   (e: 'navigate', filePath: string, lineNumber: number): void
+  (e: 'previewFile', filePath: string, lineNumber: number): void
 }
 
 const props = defineProps<Props>()
@@ -187,6 +188,22 @@ async function handleLoadMatchPreview(match: SymbolMatchItem) {
   } finally {
     previewLoading.value = false
   }
+}
+
+function handleMatchMiddleClick(e: MouseEvent, match: SymbolMatchItem) {
+  // Only handle middle-click (button === 1)
+  if (e.button !== 1) return
+
+  // Prevent default browser behavior (auto-scroll)
+  e.preventDefault()
+
+  // Blur the active element to prevent Monaco editor's hidden textarea
+  // from receiving X11 primary selection paste (Linux browser behavior)
+  if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+    (document.activeElement as HTMLElement).blur()
+  }
+
+  emit('previewFile', match.file_path, match.line_number)
 }
 
 function getSymbolClass(kind: SymbolInfo['kind']): string {
@@ -364,6 +381,7 @@ defineExpose({
                 :class="{ 'is-current': isCurrentMatch(match) }"
                 :title="`${match.kind} - ${match.file_path}:${match.line_number}`"
                 @click="handleLoadMatchPreview(match)"
+                @mousedown="handleMatchMiddleClick($event, match)"
               >
                 <span class="match-kind-small">{{ match.kind }}</span>
                 <span class="match-file-small">{{ formatFilePath(match.file_path) }}:{{ match.line_number }}</span>

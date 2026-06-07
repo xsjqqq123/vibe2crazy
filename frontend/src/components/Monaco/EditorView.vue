@@ -140,7 +140,8 @@ defineExpose({
   savePosition,
   restorePosition,
   goToLine,
-  getModel
+  getModel,
+  getEditor: () => editorRef.value?.getEditor() || null,
 })
 </script>
 

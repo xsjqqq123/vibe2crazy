@@ -42,6 +42,7 @@ const containerRef = ref<HTMLElement | null>(null)
 let editor: any = null
 let model: any = null
 let focusInterceptor: ((e: Event) => void) | null = null
+let pasteInterceptor: ((e: MouseEvent) => void) | null = null
 
 const currentLanguage = computed(() => {
   const path = props.path || props.filePath
@@ -263,10 +264,28 @@ onMounted(async () => {
       textarea.addEventListener('focus', focusInterceptor)
     }
   }
+
+  // Disable middle-click paste (X11 primary selection) on Linux
+  // Monaco delegates paste to the browser's native textarea behavior
+  const textarea = containerRef.value.querySelector('textarea')
+  if (textarea) {
+    pasteInterceptor = (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault()
+      }
+    }
+    textarea.addEventListener('mousedown', pasteInterceptor)
+  }
 })
 
 onUnmounted(() => {
   // Remove focus interceptor
+  if (pasteInterceptor && containerRef.value) {
+    const textarea = containerRef.value.querySelector('textarea')
+    if (textarea) {
+      textarea.removeEventListener('mousedown', pasteInterceptor)
+    }
+  }
   if (focusInterceptor && containerRef.value) {
     const textarea = containerRef.value.querySelector('textarea')
     if (textarea) {

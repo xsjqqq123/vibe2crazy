@@ -7,7 +7,7 @@ from app.models import Project, Task, TaskStatus, TaskStatusType, CodeStatusType
 from app.schemas import TaskCreate, TaskUpdate, TaskResponse, TaskStatusResponse, AcceptRequest, AcceptResponse
 from app.auth import require_auth
 from app.services.git_service import GitService
-from app.services.tmux_service import TmuxService
+from app.services.tmux_service import TmuxService, sanitize_session_name
 from app.config import settings
 from pathlib import Path
 import uuid
@@ -46,7 +46,7 @@ async def create_task(
 
     # Generate unique identifiers
     task_id = str(uuid.uuid4())
-    tmux_session = f"{settings.tmux_session_prefix}{project.name}-{task_id}"
+    tmux_session = sanitize_session_name(f"{settings.tmux_session_prefix}{project.name}-{task_id}")
 
     logger.info(f"Task ID: {task_id}")
     logger.info(f"Tmux session: {tmux_session}")

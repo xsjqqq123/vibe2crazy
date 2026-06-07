@@ -207,7 +207,7 @@ watch(currentFile, async (newFile, oldFile) => {
       restoreEditorPosition(mainEditorState.value, historyEntry)
     } else {
       // New file not in history - add entry with default position
-      addHistoryEntry(mainEditorState.value, newFile)
+      addHistoryEntry(mainEditorState.value, newFile, true)
     }
     // Expand file tree for main editor when file is loaded
     if (activeView.value === 'main') {
@@ -348,12 +348,17 @@ const restoreEditorPosition = (viewState: EditorViewState, entry: HistoryEntry) 
  * Called when a file is opened for the first time
  * Enforces 50-file limit by removing oldest entry
  */
-const addHistoryEntry = (viewState: EditorViewState, filePath: string) => {
+const addHistoryEntry = (viewState: EditorViewState, filePath: string, moveToFront = false) => {
   // Check if entry already exists
   const existingEntry = viewState.history.find(h => h.filePath === filePath)
   if (existingEntry) {
-    // Entry exists, update timestamp to mark as recently accessed
+    // Entry exists, update timestamp
     existingEntry.timestamp = Date.now()
+    if (moveToFront) {
+      // Remove from current position and move to front
+      viewState.history.splice(viewState.history.indexOf(existingEntry), 1)
+      viewState.history.unshift(existingEntry)
+    }
     return
   }
 
@@ -365,8 +370,12 @@ const addHistoryEntry = (viewState: EditorViewState, filePath: string) => {
     timestamp: Date.now()
   }
 
-  // Add to history
-  viewState.history.push(newEntry)
+  // Add to history (front for file tree clicks, end for keyboard navigation)
+  if (moveToFront) {
+    viewState.history.unshift(newEntry)
+  } else {
+    viewState.history.push(newEntry)
+  }
 
   // Enforce 50-file limit: remove oldest entries if exceeding
   while (viewState.history.length > 50) {
@@ -478,7 +487,7 @@ const handleFilePreview = async (filePath: string) => {
     targetState.value.editorMode = 'editor'  // Previews are always in editor mode (read-only)
 
     // Add entry to preview history
-    addHistoryEntry(targetState.value, filePath)
+    addHistoryEntry(targetState.value, filePath, true)
 
     // Find and restore position from history if available
     const historyEntry = targetState.value.history.find(h => h.filePath === filePath)
@@ -552,7 +561,7 @@ const handleFilePreviewWithLine = async (filePath: string, lineNumber: number) =
     targetState.value.editorMode = 'editor'  // Previews are always in editor mode (read-only)
 
     // Add entry to preview history
-    addHistoryEntry(targetState.value, filePath)
+    addHistoryEntry(targetState.value, filePath, true)
 
     // Jump to line after content loads
     // Wait for EditorView to render, then call goToLine
@@ -1156,7 +1165,7 @@ const loadChangedFiles = async (page: number = 1) => {
   // Don't show loading spinner during auto-refresh to prevent jitter
   // initialLoading handles the first load only
   try {
-    changedFilesData.value = await filesApi.getChangedFiles(taskId.value, page, 20)
+    changedFilesData.value = await filesApi.getChangedFiles(taskId.value, page, 30)
     changedFiles.value = changedFilesData.value.files
     changedFilesPage.value = page
   } catch (err: any) {
@@ -2308,7 +2317,7 @@ let refreshAllTasksTimer: number | null = null
 const startRefresh = () => {
   refreshTimer = window.setInterval(() => {
     if (!isLanMode()) return  // 非局域网跳过本次刷新
-    loadChangedFiles()
+    if (changedFilesPage.value === 1) loadChangedFiles()
     refreshCurrentTaskStatus()  // Update current task status display
     loadCommits(true)   // Silent refresh, no loading spinner
   }, 15000)  // Changed from 5000 to 15000 (15 seconds)
@@ -2335,7 +2344,7 @@ onMounted(async () => {
   console.log('[Layout Debug] onMounted started')
   checkMobile()
   window.addEventListener('resize', checkMobile)
-  window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('keydown', handleGlobalKeydown, true)
 
   // Load project
   const project = await projectsApi.get(projectId.value)
@@ -2425,17 +2434,33 @@ onMounted(async () => {
   console.log('[Layout Debug] onMounted completed')
 })
 
-// Global keyboard handler for Ctrl+P, Ctrl+S, and Alt+Left/Right for history navigation
+// Global keyboard handler for Ctrl+P, Ctrl+S, Alt+Up/Down for history navigation, Alt+Left/Right for edit points
 const handleGlobalKeydown = (e: KeyboardEvent) => {
-  // Alt+Left/Right for history navigation
+  // Alt+Up/Down for history navigation
+  if (e.altKey && e.key === 'ArrowUp') {
+    e.preventDefault()
+    e.stopPropagation()
+    navigateHistory('forward')
+    return
+  }
+  if (e.altKey && e.key === 'ArrowDown') {
+    e.preventDefault()
+    e.stopPropagation()
+    navigateHistory('backward')
+    return
+  }
+
+  // Alt+Left/Right for edit point navigation
   if (e.altKey && e.key === 'ArrowLeft') {
     e.preventDefault()
-    navigateHistory('backward')
+    e.stopPropagation()
+    navigateEditPoint('backward')
     return
   }
   if (e.altKey && e.key === 'ArrowRight') {
     e.preventDefault()
-    navigateHistory('forward')
+    e.stopPropagation()
+    navigateEditPoint('forward')
     return
   }
 
@@ -2484,18 +2509,46 @@ const navigateHistory = (direction: 'backward' | 'forward') => {
     return
   }
 
-  // Calculate target index with wrap-around
+  // Calculate target index, no wrap-around
   let targetIndex: number
   if (direction === 'backward') {
-    targetIndex = currentIndex > 0 ? currentIndex - 1 : viewState.value.history.length - 1
+    if (currentIndex === 0) return  // already at the first file
+    targetIndex = currentIndex - 1
   } else {
-    targetIndex = currentIndex < viewState.value.history.length - 1 ? currentIndex + 1 : 0
+    if (currentIndex === viewState.value.history.length - 1) return  // already at the last file
+    targetIndex = currentIndex + 1
   }
 
   // Get the target entry and load it
   const entry = viewState.value.history[targetIndex]
   if (entry) {
     loadFileInView(entry.filePath, viewState, entry)
+  }
+}
+
+/**
+ * Navigate through editing points (cursor position history) in the active editor
+ * Uses Monaco's built-in cursorUndo/cursorRedo commands
+ */
+const navigateEditPoint = (direction: 'backward' | 'forward') => {
+  const command = direction === 'backward' ? 'cursorUndo' : 'cursorRedo'
+  let editor: any = null
+
+  if (activeView.value === 'main') {
+    if (editorMode.value === 'diff' && diffEditorRef.value) {
+      editor = diffEditorRef.value.getDiffEditor()?.getModifiedEditor()
+    } else if (editorRef.value) {
+      editor = editorRef.value.getEditor()
+    }
+  } else if (activeView.value === 'preview1' && preview1Ref.value) {
+    editor = (preview1Ref.value as any).getEditor?.()
+  } else if (activeView.value === 'preview2' && preview2Ref.value) {
+    editor = (preview2Ref.value as any).getEditor?.()
+  }
+
+  if (editor && typeof editor.trigger === 'function') {
+    editor.trigger('keyboard', command, null)
+    editor.focus()
   }
 }
 
@@ -2572,7 +2625,7 @@ const handlePreview2Focus = () => { activeView.value = 'preview2' }
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
-  window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('keydown', handleGlobalKeydown, true)
   stopRefresh()
   // Clean up ResizeObserver
   if (window.__editorResizeObserver) {
@@ -2791,14 +2844,14 @@ onUnmounted(() => {
             <!-- Tab content -->
             <div class="flex-1 overflow-y-auto min-h-0">
               <!-- Changes tab -->
-              <div v-if="activeTab === 'changes'" class="changed-files-list p-4 min-h-full">
+              <div v-if="activeTab === 'changes'" class="changed-files-list p-2 min-h-full">
                 <div v-if="initialLoading" class="flex items-center justify-center py-4">
                   <div class="spinner"></div>
                 </div>
                 <div v-else-if="changedFiles.length === 0" class="text-sm text-sub py-2">
                   No changes detected
                 </div>
-                <div v-else class="space-y-1" @click="closeContextMenuOnClick">
+                <div v-else class="space-y-0.5" @click="closeContextMenuOnClick">
                   <div
                     v-for="file in changedFiles"
                     :key="file.path"
@@ -2807,7 +2860,7 @@ onUnmounted(() => {
                     @touchstart="(e) => handleChangedFilesTouchStart(e, file.path)"
                     @touchend="handleChangedFilesTouchEnd"
                     @touchmove="handleChangedFilesTouchMove"
-                    :class="['text-sm px-2 py-1.5 rounded cursor-pointer hover:bg-sub flex items-center justify-between gap-2', currentFile === file.path && editorMode === 'diff' ? 'item-selected' : '']"
+                    :class="['text-sm px-2 py-1 rounded cursor-pointer hover:bg-sub flex items-center justify-between gap-2', currentFile === file.path && editorMode === 'diff' ? 'item-selected' : '']"
                     :title="file.path"
                   >
                     <span :class="['truncate flex-1', currentFile === file.path && editorMode === 'diff' ? 'text-main font-medium' : 'text-green-600 dark:text-green-400']">{{ file.path }}</span>
@@ -2825,7 +2878,7 @@ onUnmounted(() => {
                   </div>
                 </div>
                 <Pagination
-                  v-if="changedFilesData && changedFilesData.total > 20"
+                  v-if="changedFilesData && changedFilesData.total > 30"
                   :total="changedFilesData.total"
                   :page="changedFilesData.page"
                   :page-size="changedFilesData.page_size"
@@ -3133,6 +3186,7 @@ onUnmounted(() => {
                     @toggle="handleOutlineToggle"
                     @preview-toggle="handlePreviewToggle"
                     @navigate="handleSymbolNavigate"
+                    @preview-file="handleFilePreviewWithLine"
                   />
                 </div>
 
@@ -3165,6 +3219,7 @@ onUnmounted(() => {
                     @toggle="handleOutlineToggle"
                     @preview-toggle="handlePreviewToggle"
                     @navigate="handleSymbolNavigate"
+                    @preview-file="handleFilePreviewWithLine"
                   />
                 </div>
 
