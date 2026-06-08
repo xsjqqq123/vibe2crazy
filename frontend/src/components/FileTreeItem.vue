@@ -194,6 +194,7 @@ watch(() => isSelected(props.path), (selected) => {
         :key="childPath"
         :path="childPath"
         :level="level + 1"
+        :status="nodes.get(childPath)?.status"
         @toggle="$emit('toggle', $event)"
         @select-file="$emit('selectFile', $event)"
         @show-context-menu="$emit('showContextMenu', $event)"

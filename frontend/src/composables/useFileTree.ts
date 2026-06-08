@@ -7,6 +7,7 @@ interface ApiFileNode {
   path: string
   type: 'file' | 'directory'
   children?: ApiFileNode[]
+  status?: string
 }
 
 export interface FileNode {
@@ -18,6 +19,7 @@ export interface FileNode {
   loaded?: boolean          // Track if children loaded
   error?: boolean           // Error state
   errorMessage?: string     // Error message
+  status?: string           // Git status code: M/A/D/?/R/C/T/U
 }
 
 export interface UseFileTreeReturn {
@@ -45,7 +47,8 @@ function toFileNode(apiNode: ApiFileNode): FileNode {
     children: undefined,
     expanded: false,
     loaded: false,
-    error: false
+    error: false,
+    status: apiNode.status
   }
 }
 

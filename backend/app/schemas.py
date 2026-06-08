@@ -82,6 +82,7 @@ class FileNode(BaseModel):
     path: str
     type: str  # "file" or "directory"
     children: Optional[list["FileNode"]] = None
+    status: Optional[str] = None  # Git status code: M/A/D/?/R/C/T/U
 
 
 class FileRead(BaseModel):

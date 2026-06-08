@@ -2044,6 +2044,14 @@ const contextMenuItems = computed<MenuItem[]>(() => {
         console.log('[ContextMenu] Copy Full Path clicked, path:', fullPath)
         copyPathToClipboard(fullPath)
       }
+    },
+    {
+      label: 'Copy Filename',
+      icon: '📄',
+      action: () => {
+        const filename = contextMenu.value.path.split('/').pop() || contextMenu.value.path
+        copyPathToClipboard(filename)
+      }
     }
   ]
 
@@ -2760,6 +2768,7 @@ onUnmounted(() => {
                     :key="path"
                     :path="path"
                     :level="0"
+                    :status="getNode(path)?.status"
                     @toggle="toggleDir"
                     @select-file="loadFile"
                     @preview-file="handleFilePreview"

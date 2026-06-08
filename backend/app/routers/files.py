@@ -70,6 +70,10 @@ async def list_files(
             detail="Task not found"
         )
 
+    # Build git status map for all changed files
+    changed = GitService.get_changed_files_with_status(task.worktree_path)
+    status_map = {f["path"]: f["status"] for f in changed}
+
     # Build full directory path
     if path:
         # List specific subdirectory
@@ -83,10 +87,10 @@ async def list_files(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid path (outside worktree)"
             )
-        tree = FileService.list_directory(str(full_path), path)
+        tree = FileService.list_directory(str(full_path), path, status_map)
     else:
         # List top-level directory
-        tree = FileService.list_directory(task.worktree_path, "")
+        tree = FileService.list_directory(task.worktree_path, "", status_map)
 
     return tree
 

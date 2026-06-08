@@ -31,13 +31,14 @@ class FileService:
     """Service for file operations"""
 
     @staticmethod
-    def list_directory(directory: str, relative_path: str = "") -> List[FileNode]:
+    def list_directory(directory: str, relative_path: str = "", status_map: dict = {}) -> List[FileNode]:
         """
         List immediate children of a directory (non-recursive, for lazy loading)
 
         Args:
             directory: Full path to the directory to list
             relative_path: Relative path from worktree root (for building node paths)
+            status_map: Dict mapping file paths to git status codes (optional)
 
         Returns:
             List of FileNode objects (only immediate children, no grandchildren)
@@ -72,7 +73,8 @@ class FileService:
                         name=item.name,
                         path=node_path,
                         type="file",
-                        children=None
+                        children=None,
+                        status=status_map.get(node_path)
                     )
                     nodes.append(node)
 
