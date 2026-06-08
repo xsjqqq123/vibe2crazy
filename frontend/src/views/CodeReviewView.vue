@@ -110,9 +110,20 @@ const commitDiffError = ref('')
 const isMarkdownFile = computed(() => {
   return currentFile.value?.toLowerCase().endsWith('.md') || false
 })
+
+// Whether the current file can toggle between editor and diff views
+// Only files with modified status (M) can toggle, and only in editor/diff modes
+const canToggleToDiff = computed(() => {
+  if (!currentFile.value) return false
+  if (editorMode.value !== 'editor' && editorMode.value !== 'diff') return false
+  return changedFiles.value.some(
+    f => f.path === currentFile.value && f.status === 'M'
+  )
+})
 const currentFile = ref<string | null>(null)
 const fileContent = ref('')
 const originalContent = ref('')
+const savedEditorOriginalContent = ref<string | null>(null)  // Preserved when toggling to diff view
 const loadingContent = ref(false)
 const savingContent = ref(false)
 const saveError = ref('')
@@ -1434,6 +1445,60 @@ const openMarkdownPreview = () => {
   markdownPreviewPath.value = currentFile.value
   markdownPreviewContent.value = fileContent.value
   showMarkdownPreview.value = true
+}
+
+// Toggle between editor and diff views for modified files
+const toggleEditorDiff = async () => {
+  if (!currentFile.value) return
+
+  // Save current cursor position
+  let savedLine = 1
+  if (editorMode.value === 'editor' && editorRef.value) {
+    const pos = editorRef.value.getPosition()
+    if (pos) savedLine = pos.lineNumber
+  } else if (editorMode.value === 'diff' && diffEditorRef.value) {
+    const diffEditor = diffEditorRef.value.getDiffEditor()
+    if (diffEditor) {
+      const pos = diffEditor.getModifiedEditor()?.getPosition()
+      if (pos) savedLine = pos.lineNumber
+    }
+  }
+
+  const targetMode = editorMode.value === 'editor' ? 'diff' : 'editor'
+
+  if (targetMode === 'diff') {
+    // Save editor-mode originalContent before switching to diff
+    savedEditorOriginalContent.value = originalContent.value
+    // Switching to diff: need git original content for comparison
+    try {
+      const originalResult = await filesApi.getOriginal(taskId.value, currentFile.value)
+      originalContent.value = originalResult.content
+    } catch {
+      originalContent.value = ''
+    }
+  } else {
+    // Switching back to editor: restore the originalContent from before diff mode,
+    // or use current fileContent if this is the first toggle (file was opened in diff mode)
+    originalContent.value = savedEditorOriginalContent.value ?? fileContent.value
+  }
+
+  editorMode.value = targetMode
+
+  // Restore cursor position after editor mounts (use delay for Monaco to initialize)
+  setTimeout(() => {
+    if (targetMode === 'editor' && editorRef.value) {
+      editorRef.value.goToLine(savedLine)
+    } else if (targetMode === 'diff' && diffEditorRef.value) {
+      const diffEditor = diffEditorRef.value.getDiffEditor()
+      if (diffEditor) {
+        const modifiedEditor = diffEditor.getModifiedEditor()
+        if (modifiedEditor) {
+          modifiedEditor.setPosition({ lineNumber: savedLine, column: 1 })
+          modifiedEditor.revealLineInCenter(savedLine)
+        }
+      }
+    }
+  }, 100)
 }
 
 // Symbol outline handlers
@@ -2989,7 +3054,13 @@ onUnmounted(() => {
                     Commit: {{ selectedCommitHash.slice(0, 8) }} - {{ selectedCommitMessage }}
                   </span>
                   <span v-else class="truncate">
-                    {{ currentFile }}{{ isFileDeleted ? ' (deleted)' : '' }}{{ editorMode === 'conflict' ? ' (conflict)' : '' }}
+                    {{ currentFile
+                    }}{{ isFileDeleted ? ' (deleted)' : ''
+                    }}{{ editorMode === 'conflict' ? ' (conflict)' : ''
+                    }}<template v-if="canToggleToDiff">
+                      <span v-if="editorMode === 'editor'" class="toggle-link" @click.stop="toggleEditorDiff">&#8203;(View diff)</span>
+                      <span v-else class="toggle-link" @click.stop="toggleEditorDiff">&#8203;(Edit file)</span>
+                    </template>
                   </span>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
@@ -3769,5 +3840,16 @@ export {}
     background: rgba(239, 68, 68, 0.15);
     color: #dc2626;
   }
+}
+
+/* Editor ↔ Diff toggle link */
+.toggle-link {
+  color: var(--accent-color, #3b82f6);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+.toggle-link:hover {
+  text-decoration: underline;
 }
 </style>
