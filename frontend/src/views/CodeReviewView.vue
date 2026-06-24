@@ -2422,6 +2422,8 @@ onMounted(async () => {
   // Load project
   const project = await projectsApi.get(projectId.value)
   store.setCurrentProject(project)
+  // Set browser tab title to project name
+  document.title = project.name || 'Code Review'
 
   // Determine task: from URL query or default Direct task
   let targetTaskId = route.query.task as string
@@ -2697,6 +2699,7 @@ const handlePreview1Focus = () => { activeView.value = 'preview1' }
 const handlePreview2Focus = () => { activeView.value = 'preview2' }
 
 onUnmounted(() => {
+  document.title = 'Code Review'
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('keydown', handleGlobalKeydown, true)
   stopRefresh()
