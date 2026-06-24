@@ -14,6 +14,7 @@ import MatrixIcon from '@/components/MatrixIcon.vue'
 import UpdateToast from '@/components/UpdateToast.vue'
 import UpdateDetailModal from '@/components/UpdateDetailModal.vue'
 import TunnelPanel from '@/components/TunnelPanel.vue'
+import MarkdownPreviewModal from '@/components/MarkdownPreviewModal.vue'
 
 const router = useRouter()
 const { logout } = useAuth()
@@ -50,6 +51,13 @@ const pendingProject = ref<ProjectCreate | null>(null)
 const pendingDirectoryProject = ref<ProjectCreate | null>(null)
 const newProject = ref({ name: '', git_path: '', main_branch: '' })
 const createError = ref('')
+
+// Markdown import modal state
+const showMarkdownImport = ref(false)
+const mdImportContent = ref('')
+const mdImportFileName = ref('')
+const mdDragOver = ref(false)
+const showMarkdownPreview = ref(false)
 
 const loadProjects = async () => {
   loading.value = true
@@ -204,6 +212,49 @@ function dismissUpdateToast() {
   updateDismissed.value = true
 }
 
+const mdFileInput = ref<HTMLInputElement>()
+
+function openMarkdownImport() {
+  showMarkdownImport.value = true
+}
+
+function closeMarkdownImport() {
+  showMarkdownImport.value = false
+  mdImportContent.value = ''
+  mdImportFileName.value = ''
+  mdDragOver.value = false
+}
+
+function handleMdFileDrop(e: DragEvent) {
+  mdDragOver.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (file) readMdFile(file)
+}
+
+function handleMdFileSelect(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (file) readMdFile(file)
+  target.value = '' // Reset so same file can be selected again
+}
+
+function readMdFile(file: File) {
+  if (!file.name.toLowerCase().endsWith('.md')) {
+    return  // silently ignore non-markdown files
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    mdImportContent.value = reader.result as string
+    mdImportFileName.value = file.name
+    showMarkdownImport.value = false
+    // Open preview after a tick so the import modal closes first
+    setTimeout(() => {
+      showMarkdownPreview.value = true
+    }, 150)
+  }
+  reader.readAsText(file)
+}
+
 onMounted(async () => {
   loadProjects()
   await init()
@@ -239,6 +290,11 @@ onMounted(async () => {
           <p class="text-xs text-sub">Projects</p>
         </div>
         <div class="flex items-center gap-2">
+          <button @click="openMarkdownImport" class="p-0 rounded-lg hover:bg-sub" title="Preview Markdown">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </button>
           <button @click="manualCheckUpdate" class="p-0 rounded-lg hover:bg-sub" title="Check for Updates">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -423,5 +479,53 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Markdown import modal -->
+    <div v-if="showMarkdownImport"
+         role="dialog"
+         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+         @click.self="closeMarkdownImport">
+      <div class="card max-w-lg w-full">
+        <h3 class="text-lg font-semibold text-main mb-4">Import Markdown</h3>
+
+        <!-- Drop zone -->
+        <div
+          @dragover.prevent="mdDragOver = true"
+          @dragleave.prevent="mdDragOver = false"
+          @drop.prevent="handleMdFileDrop"
+          @click="mdFileInput?.click()"
+          class="flex flex-col items-center justify-center min-h-[200px] border-2 border-dashed rounded-lg cursor-pointer transition-colors"
+          :class="mdDragOver ? 'border-accent bg-accent/5' : 'border-main hover:border-accent/50'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-sub mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <p class="text-sub text-sm mb-1">Drag & drop a .md file, or click to select</p>
+          <p class="text-muted text-xs">Only markdown (.md) files are accepted</p>
+        </div>
+
+        <!-- Hidden file input -->
+        <input
+          ref="mdFileInput"
+          type="file"
+          accept=".md"
+          class="hidden"
+          @change="handleMdFileSelect"
+        />
+
+        <div class="flex justify-end mt-4">
+          <button @click="closeMarkdownImport" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Markdown preview modal -->
+    <MarkdownPreviewModal
+      :task-id="''"
+      :file-path="mdImportFileName"
+      :content="mdImportContent"
+      :show="showMarkdownPreview"
+      @close="showMarkdownPreview = false"
+    />
   </div>
 </template>
