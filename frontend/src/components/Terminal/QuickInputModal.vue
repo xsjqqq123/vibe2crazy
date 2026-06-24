@@ -6,13 +6,13 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
-  send: [content: string]
+  send: [content: string, sendEnter: boolean]
   openInput: []
 }>()
 
-const handleSend = (content: string) => {
+const handleSend = (content: string, sendEnter: boolean = true) => {
   if (!props.connected) return
-  emit('send', content)
+  emit('send', content, sendEnter)
 }
 
 const handleOpenInput = () => {
@@ -48,7 +48,7 @@ const handleKeydown = (e: KeyboardEvent) => {
       <div class="space-y-2">
         <!-- ESC button -->
         <button
-          @click="handleSend('\x1b')"
+          @click="handleSend('\x1b', false)"
           :disabled="!connected"
           class="quick-input-btn w-full font-mono"
         >
@@ -57,7 +57,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 
         <!-- Ctrl+C button -->
         <button
-          @click="handleSend('\x03')"
+          @click="handleSend('\x03', false)"
           :disabled="!connected"
           class="quick-input-btn w-full font-mono"
         >

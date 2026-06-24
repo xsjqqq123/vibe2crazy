@@ -212,14 +212,16 @@ const handleWheel = (event: WheelEvent) => {
   xterm.value.scrollLines(scrollAmount)
 }
 
-const handleQuickInputSend = async (content: string) => {
+const handleQuickInputSend = async (content: string, sendEnter: boolean = true) => {
   if (!connected.value) return
   // Keep modal open for continuous input, then send with delay
   await nextTick()
   try {
     send(content)
-    await new Promise(resolve => setTimeout(resolve, 500))
-    send('\r')
+    if (sendEnter) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      send('\r')
+    }
   } catch (error) {
     console.error('Error sending quick input:', error)
   }
