@@ -350,8 +350,21 @@ class GitService:
                     "status": primary_status
                 })
 
-            # Sort by path and filter empty
-            files = sorted([f for f in files if f["path"]], key=lambda x: x["path"])
+            # Sort by modification time (newest first), then by path as tiebreaker
+            for f in files:
+                full_path = Path(worktree_path) / f["path"]
+                try:
+                    f["_mtime"] = os.path.getmtime(full_path)
+                except OSError:
+                    f["_mtime"] = None  # Deleted or inaccessible files go last
+
+            files = sorted(
+                [f for f in files if f["path"]],
+                key=lambda x: (-x["_mtime"] if x["_mtime"] is not None else float('-inf'), x["path"])
+            )
+            # Clean up temporary _mtime key
+            for f in files:
+                f.pop("_mtime", None)
             logger.debug(f"Found {len(files)} changed files with status")
             return files
 

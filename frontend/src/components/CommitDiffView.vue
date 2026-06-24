@@ -26,6 +26,25 @@ const fileDiffs = ref<Map<string, FileDiff>>(new Map())
 const loadingFiles = ref<Set<string>>(new Set())
 const expandedFiles = ref<Set<string>>(new Set())
 
+// Diff editor refs for navigation (one per expanded file)
+const diffEditorRefs = ref<Map<string, any>>(new Map())
+
+const setDiffEditorRef = (filePath: string) => {
+  return (el: any) => {
+    if (el) {
+      diffEditorRefs.value.set(filePath, el)
+    }
+  }
+}
+
+const goToNextDiff = (filePath: string) => {
+  diffEditorRefs.value.get(filePath)?.goToNextDiff()
+}
+
+const goToPrevDiff = (filePath: string) => {
+  diffEditorRefs.value.get(filePath)?.goToPrevDiff()
+}
+
 // Mobile detection
 const isMobile = ref(false)
 
@@ -166,6 +185,27 @@ function handlePageChange(page: number) {
           </div>
           <div class="flex items-center gap-2">
             <span v-if="isLoading(file.path)" class="spinner-xs"></span>
+            <!-- Diff navigation buttons (visible when file is expanded) -->
+            <template v-if="isExpanded(file.path)">
+              <button
+                @click.stop="goToPrevDiff(file.path)"
+                class="diff-nav-btn"
+                title="Previous change"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </button>
+              <button
+                @click.stop="goToNextDiff(file.path)"
+                class="diff-nav-btn"
+                title="Next change"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </button>
+            </template>
             <span class="text-xs text-sub">
               {{ isExpanded(file.path) ? '▼' : '▶' }}
             </span>
@@ -179,6 +219,7 @@ function handlePageChange(page: number) {
           </div>
           <div v-else-if="getFileDiff(file.path)" class="editor-wrapper">
             <MonacoDiffEditor
+              :ref="setDiffEditorRef(file.path)"
               :original="getFileDiff(file.path)!.original"
               :modified="getFileDiff(file.path)!.modified"
               :path="file.path"
@@ -241,5 +282,25 @@ function handlePageChange(page: number) {
 .editor-wrapper {
   height: 600px;
   min-height: 400px;
+}
+
+.diff-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.diff-nav-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-main);
 }
 </style>
