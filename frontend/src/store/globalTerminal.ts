@@ -18,6 +18,7 @@ export const useGlobalTerminalStore = defineStore('globalTerminal', () => {
   const visible = ref(false)
   const position = ref<Position>({ x: 0, y: 0 })
   const size = ref<Size>({ width: 0, height: 0 })
+  const activeInstance = ref(0)
 
   // Fixed initial size
   const INITIAL_WIDTH = 800
@@ -53,6 +54,10 @@ export const useGlobalTerminalStore = defineStore('globalTerminal', () => {
     size.value = s
   }
 
+  const setActiveInstance = (index: number) => {
+    activeInstance.value = index
+  }
+
   const loadFromStorage = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -60,6 +65,7 @@ export const useGlobalTerminalStore = defineStore('globalTerminal', () => {
         const parsed = JSON.parse(saved)
         if (parsed.position) position.value = parsed.position
         if (parsed.size) size.value = parsed.size
+        if (typeof parsed.activeInstance === 'number') activeInstance.value = parsed.activeInstance
       }
     } catch {
       // Ignore parse errors
@@ -78,7 +84,8 @@ export const useGlobalTerminalStore = defineStore('globalTerminal', () => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         position: position.value,
-        size: size.value
+        size: size.value,
+        activeInstance: activeInstance.value
       }))
     } catch {
       // Ignore storage errors
@@ -89,11 +96,13 @@ export const useGlobalTerminalStore = defineStore('globalTerminal', () => {
     visible,
     position,
     size,
+    activeInstance,
     toggle,
     show,
     hide,
     setPosition,
     setSize,
+    setActiveInstance,
     loadFromStorage,
     saveToStorage
   }

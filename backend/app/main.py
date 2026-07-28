@@ -354,10 +354,11 @@ async def websocket_global_terminal(
     websocket: WebSocket,
     token: str = Query(...),
     cols: int = Query(80),
-    rows: int = Query(24)
+    rows: int = Query(24),
+    instance: int = Query(0)
 ):
-    """WebSocket endpoint for global terminal access"""
-    logger.info(f"Global terminal WebSocket connection request - size: {cols}x{rows}")
+    """WebSocket endpoint for global terminal access (supports instances 0-3)"""
+    logger.info(f"Global terminal WebSocket connection request - instance: {instance}, size: {cols}x{rows}")
     await websocket.accept()
 
     # Verify token
@@ -367,7 +368,8 @@ async def websocket_global_terminal(
         return
 
     from app.websocket.global_terminal import GlobalWebSocketTerminal
-    terminal = GlobalWebSocketTerminal(websocket, initial_cols=cols, initial_rows=rows)
+    session_name = f"v2d-global-{instance}"
+    terminal = GlobalWebSocketTerminal(websocket, session_name=session_name, initial_cols=cols, initial_rows=rows)
     last_activity = [time.monotonic()]  # Track last client activity for idle heartbeat
 
     try:

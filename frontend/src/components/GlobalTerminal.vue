@@ -192,7 +192,7 @@ const getWsUrl = () => {
     wsBase = `${protocol}//${host}:${port}/ws`
   }
 
-  return `${wsBase}/global-terminal`
+  return `${wsBase}/global-terminal?instance=${store.activeInstance}`
 }
 
 const connect = () => {
@@ -220,7 +220,9 @@ const connect = () => {
   connectionType.value = wsNetworkManager.getType()
 
   // Include initial terminal size in WebSocket URL
-  let wsUrl = `${getWsUrl()}?token=${token.value}`
+  const baseUrl = getWsUrl()
+  const separator = baseUrl.includes('?') ? '&' : '?'
+  let wsUrl = `${baseUrl}${separator}token=${token.value}`
   if (xterm.value) {
     wsUrl += `&cols=${xterm.value.cols}&rows=${xterm.value.rows}`
   }
@@ -394,7 +396,11 @@ const initTerminal = () => {
   if (!terminalRef.value) return
 
   if (xterm.value) {
-    xterm.value.dispose()
+    try {
+      xterm.value.dispose()
+    } catch (e) {
+      console.warn('[GlobalTerminal] Error disposing terminal during init:', e)
+    }
     xterm.value = null
   }
 
@@ -513,6 +519,29 @@ const initTerminal = () => {
   // Connect immediately - network detection runs in background
   connect()
 }
+
+// Watch activeInstance to reconnect when switching tabs
+watch(() => store.activeInstance, (_newIdx, oldIdx) => {
+  if (oldIdx === undefined) return  // Skip initial watch fire
+  if (!store.visible) return        // Don't reconnect if hidden
+  // Detach old WebSocket's onclose handler so it doesn't nullify the new
+  // connection when it fires asynchronously after disconnect.
+  if (ws.value) {
+    ws.value.onclose = null
+  }
+  // Dispose existing terminal and reconnect with new instance
+  if (xterm.value) {
+    try {
+      xterm.value.dispose()
+    } catch (e) {
+      console.warn('[GlobalTerminal] Error disposing terminal during switch:', e)
+    }
+    xterm.value = null
+  }
+  disconnect()
+  store.saveToStorage()
+  initTerminal()
+})
 
 const handleResize = () => {
   nextTick(() => {
@@ -797,8 +826,8 @@ onUnmounted(() => {
       @mousedown="startDrag"
       class="flex items-center justify-between px-3 py-2 bg-sub border-b border-main cursor-move"
     >
-      <div class="flex items-center gap-2">
-        <span class="text-sm font-medium text-main">Global Terminal</span>
+      <div class="flex items-center gap-1">
+        <span class="text-sm font-medium text-main">Global Terminal #{{ store.activeInstance + 1 }}</span>
         <span
           :class="[
             'w-2 h-2 rounded-full',
@@ -820,7 +849,23 @@ onUnmounted(() => {
           {{ connectionType === 'lan' ? 'LAN' : 'WAN' }}
         </span>
       </div>
-      <button
+      <div class="flex items-center gap-1">
+        <!-- Instance tab buttons 1-4 -->
+        <button
+          v-for="i in 4"
+          :key="i"
+          @mousedown.stop="store.setActiveInstance(i - 1)"
+          :class="[
+            'tab-btn w-7 h-7 flex items-center justify-center rounded text-xs font-bold transition-colors',
+            store.activeInstance === i - 1
+              ? 'bg-blue-500 text-white'
+              : 'bg-gray-500/20 text-sub hover:bg-gray-500/40 dark:bg-gray-500/10 dark:hover:bg-gray-500/30'
+          ]"
+          :title="`Switch to Global Terminal #${i}`"
+        >
+          {{ i }}
+        </button>
+        <button
         @click="store.hide()"
         class="close-btn p-1 rounded hover:bg-tertiary text-sub hover:text-main"
         title="Close"
@@ -830,6 +875,7 @@ onUnmounted(() => {
         </svg>
       </button>
     </div>
+  </div>
 
     <!-- Terminal content -->
     <div ref="terminalRef" class="flex-1 overflow-hidden"></div>
@@ -989,5 +1035,12 @@ onUnmounted(() => {
   bottom: -6px;
   right: -6px;
   cursor: nwse-resize;
+}
+
+/* Tab button styles */
+.tab-btn {
+  min-width: 28px;
+  min-height: 28px;
+  user-select: none;
 }
 </style>
