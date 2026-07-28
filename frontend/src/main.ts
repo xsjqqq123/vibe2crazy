@@ -11,7 +11,8 @@ import './assets/styles/main.css'
 import 'splitpanes/dist/splitpanes.css'
 import 'highlight.js/styles/atom-one-dark.css'
 
-// Configure Monaco to load from local AMD files (copied to dist/vs/ during build)
+// Configure Monaco to load from local AMD files (served from public/vs/ in dev,
+// copied to dist/vs/ during build by monacoCopyPlugin)
 loader.config({
   paths: {
     vs: '/vs'

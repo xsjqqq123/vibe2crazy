@@ -87,6 +87,6 @@ release/logs/
 .playwright-mcp/
 .pytest_cache/
 Prompts.txt
-
+.reasonix/
 
 

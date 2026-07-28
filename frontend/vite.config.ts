@@ -7,8 +7,30 @@ import { cpSync, existsSync, mkdirSync } from 'fs'
 // Monaco uses AMD format (require.js) - it cannot be bundled by Vite,
 // so we copy the pre-built AMD files as static assets.
 function monacoCopyPlugin(): Plugin {
+  // Copy Monaco AMD files from node_modules to public/vs/ so they're served
+  // at /vs/... by Vite's dev server (public/ is served at root).
+  // Also copied to dist/vs/ during build via closeBundle.
+  const ensurePublicVs = () => {
+    const src = resolve(__dirname, 'node_modules/monaco-editor/min/vs')
+    if (!existsSync(src)) {
+      console.warn('[monaco-copy] Source not found:', src)
+      return
+    }
+    const publicDest = resolve(__dirname, 'public/vs')
+    if (!existsSync(publicDest)) {
+      mkdirSync(publicDest, { recursive: true })
+      cpSync(src, publicDest, { recursive: true, force: true })
+      console.log('[monaco-copy] Copied Monaco AMD files to public/vs/')
+    }
+  }
+
   return {
     name: 'vite-plugin-monaco-copy',
+    // Dev mode: copy when dev server starts
+    configureServer() {
+      ensurePublicVs()
+    },
+    // Build mode: copy during build
     closeBundle() {
       const src = resolve(__dirname, 'node_modules/monaco-editor/min/vs')
       const dest = resolve(__dirname, 'dist/vs')

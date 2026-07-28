@@ -61,9 +61,29 @@ const getMonacoTheme = (theme: ThemeName): string => {
 }
 
 onMounted(async () => {
-  if (!containerRef.value) return
+  if (!containerRef.value) {
+    console.warn('[MonacoEditor] onMounted: containerRef is null, aborting')
+    return
+  }
 
-  const monaco = await loader.init()
+  const dims = () => ({ w: containerRef.value?.offsetWidth || 0, h: containerRef.value?.offsetHeight || 0 })
+  console.log('[MonacoEditor] onMounted: start, container dims:', dims(), 'path:', props.path || props.filePath)
+
+  // Monaco is loaded via @guolao/vue-monaco-editor's loader from local /vs/ AMD files.
+  // These files are copied from node_modules to public/vs/ by the monacoCopyPlugin.
+  let monaco: any
+  try {
+    monaco = await loader.init()
+    console.log('[MonacoEditor] loader.init() done, monaco available:', !!monaco)
+  } catch (err: any) {
+    console.error('[MonacoEditor] Failed to load Monaco:', err)
+    return
+  }
+
+  if (!monaco) {
+    console.error('[MonacoEditor] monaco object is null after loading')
+    return
+  }
 
   // Define custom themes before creating editor
   monaco.editor.defineTheme('green', {
@@ -96,10 +116,18 @@ onMounted(async () => {
   // This is critical for syntax highlighting - Monaco's tokenizer needs visible dimensions
   const waitForContainerReady = (): Promise<void> => {
     return new Promise((resolve) => {
+      let attempts = 0
+      const maxAttempts = 300 // ~5 seconds at 60fps
       const checkDimensions = () => {
         if (containerRef.value && containerRef.value.offsetWidth > 0 && containerRef.value.offsetHeight > 0) {
           resolve()
+        } else if (attempts >= maxAttempts) {
+          // Timeout: container still has 0 dimensions after timeout.
+          // Force a minimum size so Monaco can initialize; layout will fix later.
+          console.warn('[MonacoEditor] Container dimensions still 0 after timeout, proceeding anyway')
+          resolve()
         } else {
+          attempts++
           requestAnimationFrame(checkDimensions)
         }
       }
@@ -109,10 +137,15 @@ onMounted(async () => {
 
   await waitForContainerReady()
 
-  // Create Monaco editor with explicit model for better tokenization control
-  model = monaco.editor.createModel(props.modelValue, currentLanguage.value)
+  console.log('[MonacoEditor] container ready, dims:', dims(), 'modelValue length:', props.modelValue?.length)
 
-  editor = monaco.editor.create(containerRef.value, {
+  // Create Monaco editor with explicit model for better tokenization control
+  // Use the LATEST modelValue — it may have been updated during the async init above
+  try {
+    model = monaco.editor.createModel(props.modelValue, currentLanguage.value)
+    console.log('[MonacoEditor] model created, language:', currentLanguage.value)
+
+    editor = monaco.editor.create(containerRef.value, {
     model: model,
     theme: getMonacoTheme(store.theme),
     automaticLayout: true,
@@ -124,16 +157,30 @@ onMounted(async () => {
     wordWrap: 'on',
     formatOnPaste: true,
     formatOnType: true
-  })
+    })
+    console.log('[MonacoEditor] editor created, model value length:', model.getValue()?.length)
+  } catch (err: any) {
+    console.error('[MonacoEditor] Failed to create editor:', err)
+    return
+  }
 
   // Force layout and tokenization after editor creation
   // This is needed when the container was previously hidden (v-if) and is now shown
   requestAnimationFrame(() => {
     if (editor && model) {
+      console.log('[MonacoEditor] rAF: applying layout, pre-layout dims:', dims())
       editor.layout()
+      console.log('[MonacoEditor] rAF: after layout, dims:', dims())
+      // Sync content again after layout — the watch may have fired during async init
+      // (before `editor` existed), losing that update. Use the latest modelValue.
+      if (props.modelValue && editor.getValue() !== props.modelValue) {
+        console.log('[MonacoEditor] rAF: syncing content, watch missed update during init')
+        editor.setValue(props.modelValue)
+      }
       // Force tokenization of the entire document
       // Monaco's tokenizer may not run on hidden/invisible content
       const lineCount = model.getLineCount()
+      console.log('[MonacoEditor] rAF: editor ready, lineCount:', lineCount, 'content length:', model.getValue()?.length)
       if (lineCount > 0) {
         // Trigger re-tokenization by briefly changing to plaintext and back
         const currentLang = model.getLanguageId()
@@ -307,8 +354,13 @@ onUnmounted(() => {
 
 // Watch for model value changes
 watch(() => props.modelValue, (newValue) => {
-  if (editor && editor.getValue() !== newValue) {
-    editor.setValue(newValue)
+  if (editor) {
+    if (editor.getValue() !== newValue) {
+      console.log('[MonacoEditor] watch: updating content, length:', newValue?.length)
+      editor.setValue(newValue)
+    }
+  } else {
+    console.log('[MonacoEditor] watch: editor not ready yet, content update LOST, length:', newValue?.length)
   }
 })
 

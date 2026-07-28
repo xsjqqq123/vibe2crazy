@@ -149,6 +149,11 @@ if frontend_path:
         app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
     # Serve favicon and other root-level static files
     app.mount("/static-root", StaticFiles(directory=str(frontend_path)), name="static-root")
+    # Serve Monaco Editor AMD files (copied to vs/ by monacoCopyPlugin during build)
+    vs_path = frontend_path / "vs"
+    if vs_path.exists():
+        app.mount("/vs", StaticFiles(directory=str(vs_path)), name="vs")
+        logger.info(f"Serving Monaco AMD files from: {vs_path}")
 else:
     logger.warning("Frontend static files not found - API-only mode")
 
