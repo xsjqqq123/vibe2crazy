@@ -1,0 +1,13 @@
+- generic [ref=f1e5]:
+  - generic [ref=f1e6]:
+    - heading "Vibe2Crazy" [level=1] [ref=f1e7]
+    - paragraph [ref=f1e8]: Remote Code Editing Tool
+  - generic [ref=f1e10]:
+    - generic [ref=f1e11]:
+      - generic [ref=f1e12]: Password
+      - textbox "Password" [active] [ref=f1e13]:
+        - /placeholder: Enter password
+    - button "Login" [ref=f1e14] [cursor=pointer]
+  - paragraph [ref=f1e15]:
+    - link "Change Password" [ref=f1e16] [cursor=pointer]:
+      - /url: /change-password

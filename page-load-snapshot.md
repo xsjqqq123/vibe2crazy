@@ -1,0 +1,32 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - heading "Vibe2Crazy" [level=1] [ref=e8]
+        - paragraph [ref=e9]: Projects
+      - generic [ref=e10]:
+        - button "Preview Markdown" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+        - button "Check for Updates" [ref=e14] [cursor=pointer]:
+          - img [ref=e15]
+        - button "Cycle theme" [ref=e17] [cursor=pointer]:
+          - img [ref=e18]
+        - button "Global Terminal" [ref=e20] [cursor=pointer]:
+          - img [ref=e21]
+        - button "Logout" [ref=e24] [cursor=pointer]:
+          - img [ref=e25]
+  - generic [ref=e29]:
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - generic [ref=e33]: Remote Access
+        - generic [ref=e34]: (Disconnected)
+      - link "Get token" [ref=e35] [cursor=pointer]:
+        - /url: https://vibe2crazy.com/login
+    - button "Configure" [ref=e36] [cursor=pointer]
+  - main [ref=e37]:
+    - generic [ref=e38]:
+      - heading "Your Projects" [level=2] [ref=e39]
+      - button "+ New Project" [ref=e40] [cursor=pointer]
+    - generic [ref=e41]:
+      - paragraph [ref=e42]: No projects yet
+      - button "Create your first project" [ref=e43] [cursor=pointer]
