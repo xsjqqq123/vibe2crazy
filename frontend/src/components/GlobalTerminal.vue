@@ -380,18 +380,14 @@ const handleWheel = (event: WheelEvent) => {
     event.stopPropagation()
     event.stopImmediatePropagation()
 
-    const direction = event.deltaY > 0 ? 'down' : 'up'
-    sendScrollCommand(direction)
+    sendScrollCommand('up')
     return
   }
 
-  // Normal scrolling within xterm buffer
-  event.preventDefault()
-  event.stopPropagation()
-  event.stopImmediatePropagation()
-
-  const scrollAmount = Math.sign(event.deltaY)
-  xterm.value.scrollLines(scrollAmount)
+  // Normal scrolling: let xterm-viewport handle natively for smooth GPU-accelerated scroll
+  // Do NOT preventDefault/stopPropagation — the browser's native scroll on
+  // xterm-viewport (overflow-y: scroll) provides smooth pixel-level scrolling.
+  // xterm.js internally syncs canvas rendering with the viewport scroll position.
 }
 
 const initTerminal = () => {
@@ -870,6 +866,8 @@ onUnmounted(() => {
 
 :deep(.xterm-viewport) {
   background-color: #ffffff !important;
+  /* Promote to own compositor layer for smooth GPU-accelerated scrolling */
+  will-change: transform;
 }
 
 :deep(.xterm-screen) {

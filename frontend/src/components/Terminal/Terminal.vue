@@ -190,26 +190,21 @@ const handleWheel = (event: WheelEvent) => {
 
   const buffer = xterm.value.buffer.active
 
-  // Check if we should enter scroll mode (scrolling up at buffer top)
+  // Only intercept when scrolling up at buffer top → enter scroll mode
   if (event.deltaY < 0 && buffer.viewportY === 0) {
-    // Scrolling up at buffer top → enter scroll mode
     enterScrollMode()
     event.preventDefault()
     event.stopPropagation()
     event.stopImmediatePropagation()
 
-    const direction = event.deltaY > 0 ? 'down' : 'up'
-    sendScrollCommand(direction)
+    sendScrollCommand('up')
     return
   }
 
-  // Normal scrolling within xterm buffer
-  event.preventDefault()
-  event.stopPropagation()
-  event.stopImmediatePropagation()
-
-  const scrollAmount = Math.sign(event.deltaY)
-  xterm.value.scrollLines(scrollAmount)
+  // Normal scrolling: let xterm-viewport handle natively for smooth GPU-accelerated scroll
+  // Do NOT preventDefault/stopPropagation — the browser's native scroll on
+  // xterm-viewport (overflow-y: scroll) provides smooth pixel-level scrolling.
+  // xterm.js internally syncs canvas rendering with the viewport scroll position.
 }
 
 const handleQuickInputSend = async (content: string, sendEnter: boolean = true) => {
@@ -554,7 +549,7 @@ onUnmounted(() => {
 <template>
   <div ref="containerRef" class="terminal-container h-full flex flex-col bg-main min-h-0">
     <!-- Terminal view -->
-    <div v-show="viewMode === 'terminal'" class="flex flex-col min-h-0 h-full">
+    <div v-show="viewMode === 'terminal'" class="flex flex-col min-h-0 flex-1">
       <div class="terminal-header flex items-center px-4 py-2 bg-sub border-b border-main flex-shrink-0">
         <div class="terminal-status flex items-center gap-2">
           <span
@@ -696,6 +691,18 @@ onUnmounted(() => {
 .terminal-container :deep(.xterm) {
   height: 100%;
   padding: 0 !important;
+  overflow: hidden;
+}
+
+.terminal-container :deep(.xterm-viewport) {
+  overflow-x: hidden !important;
+  /* Promote to own compositor layer for smooth GPU-accelerated scrolling */
+  will-change: transform;
+}
+
+.terminal-container :deep(.xterm-screen) {
+  width: 100% !important;
+  overflow-x: hidden !important;
 }
 
 .terminal-container :deep(.xterm .xterm-viewport) {
@@ -748,11 +755,6 @@ onUnmounted(() => {
 .terminal-container :deep(.xterm-scrollbar-vertical),
 .terminal-container :deep(.xterm .scrollbar) {
   display: none !important;
-}
-
-/* Make xterm-screen fill the full width (compensate for hidden scrollbar space) */
-.terminal-container :deep(.xterm-screen) {
-  width: 100% !important;
 }
 
 /* Make row children fill the full width of xterm-rows */

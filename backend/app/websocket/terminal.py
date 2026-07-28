@@ -33,6 +33,8 @@ class WebSocketTerminal:
         self.running = False
         self.cols = initial_cols
         self.rows = initial_rows
+        # Buffer for partial UTF-8 bytes split across read boundaries
+        self._utf8_buffer = b""
 
     async def start(self):
         """Start terminal session"""
@@ -119,7 +121,33 @@ class WebSocketTerminal:
                         bytes_read += len(data)
                         if bytes_read <= 100:  # Log first few reads
                             logger.debug(f"Read {len(data)} bytes from PTY")
-                        decoded = data.decode("utf-8", errors="replace")
+
+                        # Prepend any leftover bytes from the previous read to avoid
+                        # splitting a multi-byte UTF-8 character across read boundaries.
+                        # Without this, os.read() can chop a UTF-8 sequence in the middle,
+                        # and data.decode("utf-8", errors="replace") would replace the
+                        # partial bytes with U+FFFD (replacement character).
+                        if self._utf8_buffer:
+                            data = self._utf8_buffer + data
+                            self._utf8_buffer = b""
+
+                        try:
+                            decoded = data.decode("utf-8")
+                        except UnicodeDecodeError:
+                            # The data might end with a partial multi-byte character.
+                            # Try to find the longest valid UTF-8 prefix and buffer the rest.
+                            for cut in range(len(data), 0, -1):
+                                try:
+                                    decoded = data[:cut].decode("utf-8")
+                                    self._utf8_buffer = data[cut:]
+                                    break
+                                except UnicodeDecodeError:
+                                    continue
+                            else:
+                                # No valid prefix found — fall back to replace
+                                decoded = data.decode("utf-8", errors="replace")
+                                self._utf8_buffer = b""
+
                         await self.send_output(decoded)
                     else:
                         # No data - short sleep to avoid busy waiting

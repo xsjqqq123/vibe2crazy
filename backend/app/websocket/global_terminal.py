@@ -31,6 +31,8 @@ class GlobalWebSocketTerminal:
         self.running = False
         self.cols = initial_cols
         self.rows = initial_rows
+        # Buffer for partial UTF-8 bytes split across read boundaries
+        self._utf8_buffer = b""
 
     async def start(self):
         """Start terminal session"""
@@ -94,7 +96,27 @@ class GlobalWebSocketTerminal:
                     )
 
                     if data:
-                        decoded = data.decode("utf-8", errors="replace")
+                        # Prepend any leftover bytes from previous read boundary
+                        if self._utf8_buffer:
+                            data = self._utf8_buffer + data
+                            self._utf8_buffer = b""
+
+                        try:
+                            decoded = data.decode("utf-8")
+                        except UnicodeDecodeError:
+                            # Data may end with a partial multi-byte UTF-8 character.
+                            # Find the longest valid prefix and buffer the rest.
+                            for cut in range(len(data), 0, -1):
+                                try:
+                                    decoded = data[:cut].decode("utf-8")
+                                    self._utf8_buffer = data[cut:]
+                                    break
+                                except UnicodeDecodeError:
+                                    continue
+                            else:
+                                decoded = data.decode("utf-8", errors="replace")
+                                self._utf8_buffer = b""
+
                         await self.send_output(decoded)
                     else:
                         await asyncio.sleep(0.05)
