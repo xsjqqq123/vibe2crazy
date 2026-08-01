@@ -1679,3 +1679,130 @@ class GitService:
             logger.error(f"Exception resetting to commit: {e}")
             return False, str(e)
 
+    @staticmethod
+    def stash_changes(worktree_path: str, message: str = "", include_untracked: bool = True) -> tuple[bool, str]:
+        """Stash all working tree changes (including untracked by default).
+
+        Args:
+            worktree_path: Path to the git worktree
+            message: Optional stash message
+            include_untracked: If True, stash untracked files too (git stash push -u)
+
+        Returns:
+            Tuple of (success, message)
+        """
+        logger.info(f"Stashing changes in worktree: {worktree_path} (include_untracked={include_untracked})")
+        try:
+            # Check if there are any changes to stash
+            status_result = subprocess.run(
+                ["git", "-c", "core.quotePath=false", "status", "--porcelain"],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+            if status_result.returncode != 0:
+                return False, f"Failed to check git status: {status_result.stderr}"
+
+            if not status_result.stdout.strip():
+                logger.info("No changes to stash in worktree")
+                return True, "No changes to stash"
+
+            # Build stash push command
+            cmd = ["git", "-c", "core.quotePath=false", "stash", "push"]
+            if include_untracked:
+                cmd.append("-u")
+            if message:
+                cmd.extend(["-m", message])
+
+            result = subprocess.run(
+                cmd,
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+
+            if result.returncode == 0:
+                logger.info(f"Successfully stashed changes: {result.stdout.strip()}")
+                return True, result.stdout.strip() or "Changes stashed"
+            else:
+                error_msg = result.stderr or "Unknown error"
+                logger.error(f"Failed to stash changes: {error_msg}")
+                return False, error_msg
+        except Exception as e:
+            logger.error(f"Exception stashing changes: {e}")
+            return False, str(e)
+
+    @staticmethod
+    def list_stashes(worktree_path: str) -> List[dict]:
+        """List all stashes in the worktree, newest first.
+
+        Args:
+            worktree_path: Path to the git worktree
+
+        Returns:
+            List of dicts: [{ref, hash, message, date}]
+        """
+        try:
+            result = subprocess.run(
+                ["git", "-c", "core.quotePath=false", "stash", "list", "--format=%gd|%H|%gs|%ci"],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+            if result.returncode != 0:
+                logger.error(f"Failed to list stashes: {result.stderr}")
+                return []
+
+            stashes = []
+            for line in result.stdout.strip().splitlines():
+                if not line.strip():
+                    continue
+                parts = line.split("|", 3)
+                if len(parts) < 4:
+                    continue
+                ref, hash_val, msg, date = parts[0], parts[1], parts[2], parts[3]
+                stashes.append({
+                    "ref": ref,
+                    "hash": hash_val,
+                    "message": msg,
+                    "date": date
+                })
+            return stashes
+        except Exception as e:
+            logger.error(f"Exception listing stashes: {e}")
+            return []
+
+    @staticmethod
+    def pop_stash(worktree_path: str, stash_ref: str) -> tuple[bool, str]:
+        """Apply and drop a stash (git stash pop).
+
+        On conflict, the stash is kept and the conflict message is returned.
+
+        Args:
+            worktree_path: Path to the git worktree
+            stash_ref: Stash ref, e.g. "stash@{0}"
+
+        Returns:
+            Tuple of (success, message)
+        """
+        logger.info(f"Popping stash {stash_ref} in worktree: {worktree_path}")
+        try:
+            result = subprocess.run(
+                ["git", "-c", "core.quotePath=false", "stash", "pop", stash_ref],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+
+            if result.returncode == 0:
+                output = result.stdout.strip() or result.stderr.strip() or f"Restored stash {stash_ref}"
+                logger.info(f"Successfully popped stash {stash_ref}")
+                return True, output
+            else:
+                error_msg = result.stderr or result.stdout or f"Failed to pop stash {stash_ref}"
+                logger.error(f"Failed to pop stash {stash_ref}: {error_msg}")
+                return False, error_msg
+        except Exception as e:
+            logger.error(f"Exception popping stash: {e}")
+            return False, str(e)
+

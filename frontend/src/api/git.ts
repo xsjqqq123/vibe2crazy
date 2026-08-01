@@ -108,10 +108,52 @@ export async function getBranches(gitPath: string): Promise<BranchListResponse> 
   return request<BranchListResponse>(`/git/branches?path=${encodeURIComponent(gitPath)}`)
 }
 
+export interface StashItem {
+  ref: string
+  hash: string
+  message: string
+  date: string
+}
+
+export interface StashListResponse {
+  stashes: StashItem[]
+}
+
+export async function stash(
+  taskId: string,
+  message: string = '',
+  includeUntracked: boolean = true
+): Promise<ResetResponse> {
+  return request<ResetResponse>(`/tasks/${taskId}/stash`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ message, include_untracked: includeUntracked })
+  })
+}
+
+export async function listStashes(taskId: string): Promise<StashListResponse> {
+  return request<StashListResponse>(`/tasks/${taskId}/stashes`)
+}
+
+export async function popStash(taskId: string, stashRef: string): Promise<ResetResponse> {
+  return request<ResetResponse>(`/tasks/${taskId}/stash/pop`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ stash_ref: stashRef })
+  })
+}
+
 export const gitApi = {
   getWorktreeCommits,
   getCommitDiff,
   getFileDiff,
   resetToCommit,
-  getBranches
+  getBranches,
+  stash,
+  listStashes,
+  popStash
 }

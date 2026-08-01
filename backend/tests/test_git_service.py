@@ -299,3 +299,78 @@ def test_auto_commit_worktree_includes_gitignore_by_default(tmp_project, task_wo
 
     assert "a.txt" in committed
     assert ".gitignore" in committed, ".gitignore should be committed by default"
+
+
+def test_stash_changes_no_changes_returns_noop(tmp_project, task_worktree):
+    """stash_changes on a clean worktree should report no changes to stash."""
+    success, msg = GitService.stash_changes(str(task_worktree))
+    assert success is True
+    assert "no changes" in msg.lower()
+
+
+def test_stash_changes_stashes_modified_and_untracked(tmp_project, task_worktree):
+    """stash_changes should stash modified AND untracked files (-u), leaving worktree clean."""
+    (task_worktree / "tracked.txt").write_text("v1")
+    subprocess.run(["git", "add", "."], cwd=task_worktree, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "seed"],
+        cwd=task_worktree,
+        check=True,
+        env={
+            "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@test.com",
+            "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@test.com"
+        }
+    )
+    # Now modify tracked file and create an untracked file
+    (task_worktree / "tracked.txt").write_text("v2")
+    (task_worktree / "new_untracked.txt").write_text("untracked")
+
+    success, msg = GitService.stash_changes(str(task_worktree), message="test stash")
+    assert success, f"Stash should succeed: {msg}"
+
+    # Worktree should be clean after stash
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=task_worktree, capture_output=True, text=True
+    ).stdout.strip()
+    assert status == "", f"Worktree should be clean after stash, got: {status!r}"
+
+
+def test_list_stashes_returns_parsed_entries(tmp_project, task_worktree):
+    """list_stashes should return parsed stash entries (ref/hash/message/date)."""
+    (task_worktree / "a.txt").write_text("content")
+    success, msg = GitService.stash_changes(str(task_worktree), message="my stash")
+    assert success, f"Stash should succeed: {msg}"
+
+    stashes = GitService.list_stashes(str(task_worktree))
+    assert len(stashes) >= 1
+    entry = stashes[0]
+    assert entry["ref"].startswith("stash@{")
+    assert len(entry["hash"]) >= 7
+    assert "my stash" in entry["message"]
+    assert entry["date"]
+
+
+def test_pop_stash_restores_files_and_removes_entry(tmp_project, task_worktree):
+    """pop_stash should restore files to the worktree and drop the stash entry."""
+    (task_worktree / "a.txt").write_text("stashed content")
+    success, _ = GitService.stash_changes(str(task_worktree), message="to pop")
+    assert success
+
+    # Worktree is clean now
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=task_worktree, capture_output=True, text=True
+    ).stdout.strip()
+    assert status == ""
+
+    stashes = GitService.list_stashes(str(task_worktree))
+    assert len(stashes) >= 1
+    ref = stashes[0]["ref"]
+
+    success, msg = GitService.pop_stash(str(task_worktree), ref)
+    assert success, f"Pop should succeed: {msg}"
+
+    # File restored
+    assert (task_worktree / "a.txt").read_text() == "stashed content"
+    # Stash entry dropped
+    stashes_after = GitService.list_stashes(str(task_worktree))
+    assert all(s["ref"] != ref for s in stashes_after)

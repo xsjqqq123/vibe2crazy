@@ -38,6 +38,19 @@ class ResetResponse(BaseModel):
     message: str
 
 
+class StashRequest(BaseModel):
+    message: str = ""
+    include_untracked: bool = True
+
+
+class PopStashRequest(BaseModel):
+    stash_ref: str
+
+
+class StashListResponse(BaseModel):
+    stashes: List[dict]
+
+
 branch_router = APIRouter(prefix="/api/git", tags=["git"])
 
 
@@ -374,6 +387,71 @@ async def reset_to_commit(
         worktree_path=task.worktree_path,
         commit_hash=reset_request.commit_hash,
         include_commit=reset_request.include_commit
+    )
+
+    return ResetResponse(success=success, message=message)
+
+
+@router.post("/{task_id}/stash", response_model=ResetResponse)
+async def stash_changes_endpoint(
+    task_id: str,
+    stash_request: StashRequest,
+    db: Session = Depends(get_db),
+    current_user: Task = Depends(require_auth)
+):
+    """Stash all working tree changes in the task worktree (includes untracked by default)."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    success, message = GitService.stash_changes(
+        worktree_path=task.worktree_path,
+        message=stash_request.message,
+        include_untracked=stash_request.include_untracked
+    )
+
+    return ResetResponse(success=success, message=message)
+
+
+@router.get("/{task_id}/stashes", response_model=StashListResponse)
+async def list_stashes_endpoint(
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: Task = Depends(require_auth)
+):
+    """List all stashes in the task worktree, newest first."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    stashes = GitService.list_stashes(task.worktree_path)
+    return StashListResponse(stashes=stashes)
+
+
+@router.post("/{task_id}/stash/pop", response_model=ResetResponse)
+async def pop_stash_endpoint(
+    task_id: str,
+    pop_request: PopStashRequest,
+    db: Session = Depends(get_db),
+    current_user: Task = Depends(require_auth)
+):
+    """Apply and drop a stash from the task worktree."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    success, message = GitService.pop_stash(
+        worktree_path=task.worktree_path,
+        stash_ref=pop_request.stash_ref
     )
 
     return ResetResponse(success=success, message=message)

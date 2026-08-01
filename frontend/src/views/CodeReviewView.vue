@@ -7,7 +7,7 @@ import { useMainStore } from '@/store'
 import filesApi from '@/api/files'
 import tasksApi, { type Task, type TaskStatusType, type CodeStatusType } from '@/api/tasks'
 import projectsApi from '@/api/projects'
-import { gitApi, type CommitInfo, type PaginatedCommitsResponse } from '@/api/git'
+import { gitApi, type CommitInfo, type PaginatedCommitsResponse, type StashItem } from '@/api/git'
 import { type ChangedFileInfo, type PaginatedChangedFilesResponse } from '@/api/files'
 import { isLanMode } from '@/api/client'
 import FileCacheService from '@/services/FileCacheService'
@@ -599,6 +599,15 @@ const showSettingsModal = ref(false)
 const showCommitMessageModal = ref(false)
 const commitMessage = ref('')
 const acceptIncludeGitignore = ref(true)
+
+// Stash modal
+const showStashListModal = ref(false)
+const stashMessage = ref('')
+const stashList = ref<StashItem[]>([])
+const stashListLoading = ref(false)
+const stashing = ref(false)
+const stashError = ref('')
+const stashSuccess = ref('')
 
 // File type support check for symbol outline (only languages with extraction patterns)
 const isSupportedFileType = computed(() => {
@@ -1741,6 +1750,96 @@ const acceptChanges = async () => {
   }
 
   accepting.value = false
+}
+
+const openStashListModal = async () => {
+  showStashListModal.value = true
+  stashMessage.value = ''
+  stashError.value = ''
+  stashSuccess.value = ''
+  await loadStashList()
+}
+
+const closeStashListModal = () => {
+  showStashListModal.value = false
+}
+
+const loadStashList = async () => {
+  if (!taskId.value) return
+  stashListLoading.value = true
+  try {
+    const res = await gitApi.listStashes(taskId.value)
+    stashList.value = res.stashes || []
+  } catch (err: any) {
+    console.error('Failed to load stashes:', err)
+    stashError.value = err.message || 'Failed to load stashes'
+  } finally {
+    stashListLoading.value = false
+  }
+}
+
+const createStash = async () => {
+  if (!taskId.value || stashing.value) return
+  stashing.value = true
+  stashError.value = ''
+  stashSuccess.value = ''
+  try {
+    const res = await gitApi.stash(taskId.value, stashMessage.value, true)
+    if (!res.success) {
+      stashError.value = res.message || 'Stash failed'
+      return
+    }
+    stashMessage.value = ''
+    stashSuccess.value = res.message || 'Changes stashed'
+    // Refresh list, changed files and commits after stashing
+    await loadStashList()
+    await loadChangedFiles()
+    await loadCommits(true)
+    // Auto-hide success after 3 seconds
+    setTimeout(() => {
+      stashSuccess.value = ''
+    }, 3000)
+  } catch (err: any) {
+    console.error('Failed to stash:', err)
+    stashError.value = err.message || 'Failed to stash'
+  } finally {
+    stashing.value = false
+  }
+}
+
+const popStashEntry = async (item: StashItem) => {
+  if (!taskId.value || stashing.value) return
+  const confirmed = await showConfirm({
+    title: 'Restore Stash',
+    message: `Apply and remove ${item.ref}${item.message ? ` — ${item.message}` : ''}?`,
+    confirmText: 'Restore',
+    danger: false
+  })
+  if (!confirmed) return
+
+  stashing.value = true
+  stashError.value = ''
+  stashSuccess.value = ''
+  try {
+    const res = await gitApi.popStash(taskId.value, item.ref)
+    if (!res.success) {
+      stashError.value = res.message || `Failed to restore ${item.ref}`
+      return
+    }
+    stashSuccess.value = res.message || `Restored ${item.ref}`
+    // Refresh list, changed files and commits after pop
+    await loadStashList()
+    await loadChangedFiles()
+    await loadCommits(true)
+    setTimeout(() => {
+      stashSuccess.value = ''
+    }, 3000)
+  } catch (err: any) {
+    console.error('Failed to pop stash:', err)
+    stashError.value = err.message || `Failed to restore ${item.ref}`
+  } finally {
+    stashing.value = false
+  }
 }
 
 const refreshCurrentTaskStatus = async () => {
@@ -2918,6 +3017,18 @@ onUnmounted(() => {
                   Commits
                 </button>
               </div>
+              <!-- Stash button: visible in changes tab (opens stash list) -->
+              <button
+                v-if="activeTab === 'changes'"
+                @click="openStashListModal"
+                :disabled="stashing"
+                :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': stashing }]"
+                title="Stash"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+              </button>
               <!-- Accept button: visible in changes tab -->
               <button
                 v-if="activeTab === 'changes'"
@@ -3705,6 +3816,72 @@ onUnmounted(() => {
           >
             Accept
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stash List Modal -->
+    <div v-if="showStashListModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card max-w-lg w-full">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-main">Stash</h3>
+          <button
+            @click="createStash"
+            :disabled="stashing"
+            :class="['btn btn-primary text-sm px-3 py-1', { 'opacity-50 cursor-not-allowed': stashing }]"
+            title="Create stash"
+          >
+            <span v-if="stashing" class="spinner w-3 h-3 border-2 border-white border-t-transparent rounded-full inline-block align-middle mr-1"></span>
+            Create
+          </button>
+        </div>
+
+        <!-- Stash message input (used by Create) -->
+        <input
+          v-model="stashMessage"
+          type="text"
+          class="w-full p-2 mb-3 border border-main rounded-lg bg-main text-main text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+          placeholder="Enter stash message (optional)"
+          @keyup.enter="createStash"
+        />
+
+        <!-- Stash success/error feedback -->
+        <p v-if="stashSuccess" class="text-sm text-green-600 dark:text-green-400 mb-3">{{ stashSuccess }}</p>
+        <p v-if="stashError" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ stashError }}</p>
+
+        <!-- Stash list -->
+        <div v-if="stashListLoading" class="flex items-center justify-center py-6">
+          <div class="spinner"></div>
+        </div>
+        <div v-else-if="stashList.length === 0" class="text-sm text-sub text-center py-6">
+          No stashes
+        </div>
+        <div v-else class="max-h-80 overflow-y-auto space-y-2">
+          <div
+            v-for="item in stashList"
+            :key="item.ref"
+            class="flex items-center justify-between gap-2 p-2 border border-main rounded-lg"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="text-sm text-main font-medium truncate">
+                {{ item.ref }}
+                <span v-if="item.message" class="text-sub font-normal">— {{ item.message }}</span>
+              </div>
+              <div class="text-xs text-sub truncate">{{ item.date }}</div>
+            </div>
+            <button
+              @click="popStashEntry(item)"
+              :disabled="stashing"
+              class="btn btn-secondary text-xs px-2 py-1 flex-shrink-0"
+              title="Restore stash"
+            >
+              Restore
+            </button>
+          </div>
+        </div>
+
+        <div class="flex justify-end mt-4">
+          <button @click="closeStashListModal" class="btn btn-secondary">Close</button>
         </div>
       </div>
     </div>
