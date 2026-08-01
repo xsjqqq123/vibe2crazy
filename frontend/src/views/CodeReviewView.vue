@@ -3017,44 +3017,47 @@ onUnmounted(() => {
                   Commits
                 </button>
               </div>
-              <!-- Stash button: visible in changes tab (opens stash list) -->
-              <button
-                v-if="activeTab === 'changes'"
-                @click="openStashListModal"
-                :disabled="stashing"
-                :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': stashing }]"
-                title="Stash"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                </svg>
-              </button>
-              <!-- Accept button: visible in changes tab -->
-              <button
-                v-if="activeTab === 'changes'"
-                @click="openCommitMessageModal"
-                :disabled="accepting"
-                :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
-                title="Accept"
-              >
-                <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </button>
-              <!-- Merge button: visible in commits tab, not direct_on_branch -->
-              <button
-                v-if="activeTab === 'commits' && !task?.direct_on_branch"
-                @click="mergeTask"
-                :disabled="syncing"
-                :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
-                title="Merge"
-              >
-                <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </button>
+              <!-- Action buttons: grouped right, adjacent to each other -->
+              <div class="flex items-center gap-1 shrink-0">
+                <!-- Stash button: visible in changes tab (opens stash list) -->
+                <button
+                  v-if="activeTab === 'changes'"
+                  @click="openStashListModal"
+                  :disabled="stashing"
+                  :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': stashing }]"
+                  title="Stash"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                </button>
+                <!-- Accept button: visible in changes tab -->
+                <button
+                  v-if="activeTab === 'changes'"
+                  @click="openCommitMessageModal"
+                  :disabled="accepting"
+                  :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': accepting }]"
+                  title="Accept"
+                >
+                  <span v-if="accepting" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <!-- Merge button: visible in commits tab, not direct_on_branch -->
+                <button
+                  v-if="activeTab === 'commits' && !task?.direct_on_branch"
+                  @click="mergeTask"
+                  :disabled="syncing"
+                  :class="['p-0 rounded-lg hover:bg-sub', { 'pointer-events-none opacity-60 cursor-not-allowed': syncing }]"
+                  title="Merge"
+                >
+                  <span v-if="syncing" class="spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <!-- Tab content -->
@@ -3823,27 +3826,27 @@ onUnmounted(() => {
     <!-- Stash List Modal -->
     <div v-if="showStashListModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="card max-w-lg w-full">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold text-main">Stash</h3>
+        <h3 class="text-lg font-semibold text-main mb-4">Stash</h3>
+
+        <!-- Stash message + Create in one row (message is required) -->
+        <div class="flex items-center gap-2 mb-3">
+          <input
+            v-model="stashMessage"
+            type="text"
+            class="flex-1 p-2 border border-main rounded-lg bg-main text-main text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            placeholder="Enter stash message"
+            @keyup.enter="createStash"
+          />
           <button
             @click="createStash"
-            :disabled="stashing"
-            :class="['btn btn-primary text-sm px-3 py-1', { 'opacity-50 cursor-not-allowed': stashing }]"
+            :disabled="stashing || !stashMessage.trim()"
+            :class="['btn btn-primary text-sm px-3 py-1 flex-shrink-0', { 'opacity-50 cursor-not-allowed': stashing || !stashMessage.trim() }]"
             title="Create stash"
           >
             <span v-if="stashing" class="spinner w-3 h-3 border-2 border-white border-t-transparent rounded-full inline-block align-middle mr-1"></span>
             Create
           </button>
         </div>
-
-        <!-- Stash message input (used by Create) -->
-        <input
-          v-model="stashMessage"
-          type="text"
-          class="w-full p-2 mb-3 border border-main rounded-lg bg-main text-main text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          placeholder="Enter stash message (optional)"
-          @keyup.enter="createStash"
-        />
 
         <!-- Stash success/error feedback -->
         <p v-if="stashSuccess" class="text-sm text-green-600 dark:text-green-400 mb-3">{{ stashSuccess }}</p>
