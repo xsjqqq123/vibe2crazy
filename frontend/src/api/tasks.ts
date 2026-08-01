@@ -106,10 +106,10 @@ const tasksApi = {
       method: 'DELETE'
     }),
 
-  accept: (taskId: string, message?: string) =>
+  accept: (taskId: string, message?: string, includeGitignore: boolean = true) =>
     request('/tasks/' + taskId + '/accept', {
       method: 'POST',
-      body: JSON.stringify({ message: message || 'Accept changes' })
+      body: JSON.stringify({ message: message || 'Accept changes', include_gitignore: includeGitignore })
     }),
 
   merge: (taskId: string, message: string = 'Merge task') =>

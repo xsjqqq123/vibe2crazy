@@ -119,6 +119,15 @@ class PaginatedChangedFilesResponse(BaseModel):
 
 class AcceptRequest(BaseModel):
     message: Optional[str] = "Accept changes"
+    # If True (default), the .gitignore file is committed along with other changes.
+    # If False, .gitignore is excluded from this commit (e.g. when it was just
+    # modified by "Add to gitignore" actions but the user doesn't want it committed yet).
+    include_gitignore: Optional[bool] = True
+
+
+class GitignoreRequest(BaseModel):
+    path: str
+    is_dir: Optional[bool] = False
 
 
 class AcceptResponse(BaseModel):

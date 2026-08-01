@@ -990,9 +990,15 @@ class GitService:
             return []
 
     @staticmethod
-    def auto_commit_worktree(worktree_path: str, message: str = "Auto-commit changes") -> tuple[bool, str]:
+    def auto_commit_worktree(
+        worktree_path: str,
+        message: str = "Auto-commit changes",
+        include_gitignore: bool = True
+    ) -> tuple[bool, str]:
         """
-        Automatically commit all changes in the worktree
+        Automatically commit all changes in the worktree.
+        If include_gitignore is False, .gitignore is excluded from the commit
+        (staged by `git add -A` but then unstaged via `git reset -- .gitignore`).
         Returns: (success, message)
         """
         logger.info(f"Auto-committing changes in worktree: {worktree_path}")
@@ -1029,6 +1035,32 @@ class GitService:
                 error_msg = f"Failed to add changes: {add_result.stderr}"
                 logger.error(error_msg)
                 return False, error_msg
+
+            # Optionally exclude .gitignore from this commit (e.g. the user just
+            # added entries but doesn't want them committed yet)
+            if not include_gitignore:
+                logger.info("Excluding .gitignore from commit")
+                reset_result = subprocess.run(
+                    ["git", "reset", "--", ".gitignore"],
+                    cwd=worktree_path,
+                    capture_output=True,
+                    text=True, encoding="utf-8"
+                )
+                if reset_result.returncode != 0:
+                    error_msg = f"Failed to unstage .gitignore: {reset_result.stderr}"
+                    logger.error(error_msg)
+                    return False, error_msg
+                # Verify .gitignore is no longer staged
+                staged_check = subprocess.run(
+                    ["git", "diff", "--cached", "--name-only"],
+                    cwd=worktree_path,
+                    capture_output=True,
+                    text=True, encoding="utf-8"
+                )
+                if ".gitignore" in staged_check.stdout.split():
+                    logger.warning("WARNING: .gitignore is still staged after reset!")
+                else:
+                    logger.info(".gitignore successfully unstaged (not in staged list)")
 
             # Commit the changes
             logger.debug(f"Committing with message: {message}")

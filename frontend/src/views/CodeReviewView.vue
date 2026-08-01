@@ -598,6 +598,7 @@ const showSettingsModal = ref(false)
 // Commit message modal
 const showCommitMessageModal = ref(false)
 const commitMessage = ref('')
+const acceptIncludeGitignore = ref(true)
 
 // File type support check for symbol outline (only languages with extraction patterns)
 const isSupportedFileType = computed(() => {
@@ -1714,6 +1715,7 @@ const copyExecutionLog = () => {
 
 const openCommitMessageModal = () => {
   commitMessage.value = `Accept changes for ${task.value?.name || 'task'}`
+  acceptIncludeGitignore.value = true
   showCommitMessageModal.value = true
 }
 
@@ -1724,7 +1726,7 @@ const acceptChanges = async () => {
   acceptSuccess.value = false
 
   try {
-    await tasksApi.accept(taskId.value, commitMessage.value)
+    await tasksApi.accept(taskId.value, commitMessage.value, acceptIncludeGitignore.value)
     acceptSuccess.value = true
     // Reload changed files to update the list
     await loadChangedFiles()
@@ -2089,6 +2091,22 @@ const handleDownloadFile = () => {
   }
 }
 
+const handleAddToGitignore = async () => {
+  const path = contextMenu.value.path
+  const isDir = contextMenu.value.type === 'directory'
+  closeContextMenu()
+  try {
+    const result = await filesApi.addToGitignore(taskId.value, path, isDir)
+    console.log('[ContextMenu] Added to gitignore:', result)
+    // Refresh changed files (untracked files now ignored disappear from list)
+    await loadChangedFiles()
+    // Refresh file tree to update status markers
+    await loadFileTree()
+  } catch (error: any) {
+    console.error('Failed to add to gitignore:', error)
+  }
+}
+
 const contextMenuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
     {
@@ -2135,6 +2153,11 @@ const contextMenuItems = computed<MenuItem[]>(() => {
       disabled: false
     })
     items.push({
+      label: 'Add to gitignore',
+      icon: '🚫',
+      action: () => handleAddToGitignore()
+    })
+    items.push({
       label: 'Delete',
       icon: '🗑️',
       action: async () => {
@@ -2162,6 +2185,11 @@ const contextMenuItems = computed<MenuItem[]>(() => {
       danger: true
     })
   } else if (contextMenu.value.source === 'changedFiles') {
+    items.push({
+      label: 'Add to gitignore',
+      icon: '🚫',
+      action: () => handleAddToGitignore()
+    })
     items.push({
       label: 'Revert',
       icon: '↩️',
@@ -3654,6 +3682,15 @@ onUnmounted(() => {
           class="w-full h-24 p-3 border border-main rounded-lg bg-main text-main text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent"
           placeholder="Enter commit message..."
         ></textarea>
+        <label class="flex items-center gap-2 mt-3 text-sm text-sub cursor-pointer select-none">
+          <input
+            type="checkbox"
+            v-model="acceptIncludeGitignore"
+            class="w-4 h-4 rounded border-main accent-accent"
+          />
+          with .gitignore
+          <span class="text-xs opacity-70">(uncheck to exclude .gitignore from this commit)</span>
+        </label>
         <div class="flex justify-end gap-2 mt-4">
           <button
             @click="showCommitMessageModal = false"

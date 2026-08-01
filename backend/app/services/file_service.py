@@ -16,6 +16,36 @@ MAX_FILE_SIZE = 512000
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", "104857600"))  # 100MB default
 TEMP_UPLOAD_DIR = os.getenv("TEMP_UPLOAD_DIR", "/tmp/vibe2crazy-upload")
 
+# File extensions excluded from Ctrl+P file search (compiled artifacts, temp files).
+# Matched case-insensitively — these files NEVER appear in search results,
+# even when the query explicitly matches them.
+EXCLUDED_FILE_EXTENSIONS = (
+    # C/C++ build artifacts
+    ".o", ".obj", ".a", ".so", ".lo", ".la", ".d", ".ko",
+    # Python bytecode
+    ".pyc", ".pyo", ".pyd",
+    # Java
+    ".class",
+    # Rust
+    ".rlib", ".rmeta",
+    # Linked/executable artifacts
+    ".exe", ".dll", ".dylib", ".lib", ".out", ".bin",
+    # Temp/backup files
+    ".swp", ".swo", ".tmp", ".bak", ".ds_store",
+)
+
+# Directory names excluded from Ctrl+P file search (skipped without recursion).
+EXCLUDED_DIR_NAMES = {
+    "__pycache__",
+    ".pytest_cache",
+    "node_modules",
+    ".venv",
+    "venv",
+    "target",
+    ".mypy_cache",
+    ".ruff_cache",
+}
+
 
 def format_file_size(size_bytes: int) -> str:
     """Format file size in human-readable format."""
@@ -324,6 +354,10 @@ class FileService:
                             rel_path = os.path.join(current_rel, entry.name) if current_rel else entry.name
 
                             if entry.is_file():
+                                # Skip compiled artifacts / temp files (case-insensitive).
+                                # These never appear in results, even on explicit query match.
+                                if entry.name.lower().endswith(EXCLUDED_FILE_EXTENSIONS):
+                                    continue
                                 # Check if file matches the search query
                                 if not query or query in rel_path.lower():
                                     results.append(rel_path)
@@ -331,6 +365,9 @@ class FileService:
                                     if len(results) >= limit:
                                         return
                             elif entry.is_dir():
+                                # Skip build/cache directories without recursing into them
+                                if entry.name in EXCLUDED_DIR_NAMES:
+                                    continue
                                 # Recursively collect files from subdirectories
                                 _collect_files(Path(entry.path), rel_path)
                                 # Early exit if we've reached the limit
@@ -387,6 +424,59 @@ class FileService:
         except Exception as e:
             logger.error(f"Error listing all files in {directory}: {e}")
             return []
+
+    @staticmethod
+    def add_to_gitignore(worktree_path: str, file_path: str, is_dir: bool = False) -> tuple[bool, str]:
+        """
+        Add a file/directory entry to the worktree's .gitignore (idempotent).
+
+        Args:
+            worktree_path: Full path to the worktree root
+            file_path: Worktree-relative path (e.g. "src/main.o" or "build/")
+            is_dir: If True, append a trailing "/" to the entry
+
+        Returns:
+            (success, message)
+        """
+        try:
+            # Normalize the entry: forward slashes, strip leading "./"
+            entry = file_path.replace("\\", "/").strip()
+            while entry.startswith("./"):
+                entry = entry[2:]
+            if not entry:
+                return False, "Empty path"
+
+            # Security check: resolve and ensure the target stays inside the worktree
+            full_path = (Path(worktree_path) / entry).resolve()
+            worktree = Path(worktree_path).resolve()
+            try:
+                full_path.relative_to(worktree)
+            except ValueError:
+                return False, "Path outside worktree"
+
+            if is_dir and not entry.endswith("/"):
+                entry += "/"
+
+            gitignore_path = Path(worktree_path) / ".gitignore"
+
+            if gitignore_path.exists():
+                content = gitignore_path.read_text(encoding="utf-8")
+                lines = content.splitlines()
+                if entry in lines:
+                    return True, f"'{entry}' already in .gitignore"
+                # Ensure a newline before appending if the file doesn't end with one
+                if content and not content.endswith('\n'):
+                    content += '\n'
+                content += entry + '\n'
+                gitignore_path.write_text(content, encoding="utf-8")
+            else:
+                gitignore_path.write_text(entry + '\n', encoding="utf-8")
+
+            logger.info(f"Added '{entry}' to .gitignore in {worktree_path}")
+            return True, f"Added '{entry}' to .gitignore"
+        except Exception as e:
+            logger.error(f"Failed to add '{file_path}' to .gitignore: {e}")
+            return False, str(e)
 
     @staticmethod
     def generate_unique_filename(directory: str, filename: str) -> str:

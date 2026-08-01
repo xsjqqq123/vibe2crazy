@@ -239,3 +239,63 @@ def test_get_local_branches_handles_non_git_directory(tmp_path):
 
     assert branches == []
     assert current == ""
+
+
+def test_auto_commit_worktree_excludes_gitignore_when_requested(tmp_project, task_worktree):
+    """
+    auto_commit_worktree(include_gitignore=False) should commit other files
+    but leave .gitignore out of the commit.
+    """
+    # Create a normal file and a .gitignore in the worktree
+    (task_worktree / "a.txt").write_text("hello")
+    (task_worktree / ".gitignore").write_text("*.o\n")
+
+    success, msg = GitService.auto_commit_worktree(
+        str(task_worktree),
+        message="Accept without gitignore",
+        include_gitignore=False
+    )
+
+    assert success, f"Commit should succeed: {msg}"
+
+    # Files in the latest commit
+    show = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=task_worktree,
+        capture_output=True,
+        text=True
+    )
+    committed = show.stdout.split()
+
+    assert "a.txt" in committed, "Normal file should be committed"
+    assert ".gitignore" not in committed, ".gitignore should be excluded from commit"
+
+    # .gitignore should still exist on disk with its content
+    assert (task_worktree / ".gitignore").read_text() == "*.o\n"
+
+
+def test_auto_commit_worktree_includes_gitignore_by_default(tmp_project, task_worktree):
+    """
+    auto_commit_worktree() with default include_gitignore=True should commit
+    .gitignore along with other changes.
+    """
+    (task_worktree / "a.txt").write_text("hello")
+    (task_worktree / ".gitignore").write_text("*.o\n")
+
+    success, msg = GitService.auto_commit_worktree(
+        str(task_worktree),
+        message="Accept with gitignore"
+    )
+
+    assert success, f"Commit should succeed: {msg}"
+
+    show = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=task_worktree,
+        capture_output=True,
+        text=True
+    )
+    committed = show.stdout.split()
+
+    assert "a.txt" in committed
+    assert ".gitignore" in committed, ".gitignore should be committed by default"

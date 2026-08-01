@@ -112,6 +112,12 @@ const filesApi = {
     })
   },
 
+  addToGitignore: (taskId: string, path: string, isDir: boolean = false) =>
+    request<{ success: boolean; path: string; message: string }>(`/tasks/${taskId}/gitignore`, {
+      method: 'POST',
+      body: JSON.stringify({ path, is_dir: isDir })
+    }),
+
   getRawFile: (taskId: string, filePath: string, onProgress?: ProgressCallback) => {
     const encodedPath = encodeFilePath(filePath)
     if (onProgress) {

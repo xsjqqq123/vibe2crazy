@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session as DBSession
 from typing import List, Optional
 from app.database import get_db
 from app.models import Task, Session
-from app.schemas import FileNode, FileRead, FileWrite, FileDeleteResponse, ChangedFilesResponse, RevertResponse, FileUploadResponse, TempUploadResult, TempUploadResponse, PaginatedChangedFilesResponse
+from app.schemas import FileNode, FileRead, FileWrite, FileDeleteResponse, ChangedFilesResponse, RevertResponse, FileUploadResponse, TempUploadResult, TempUploadResponse, PaginatedChangedFilesResponse, GitignoreRequest
 from app.auth import require_auth
 from app.services.file_service import FileService, MAX_FILE_SIZE, format_file_size, MAX_UPLOAD_SIZE, TEMP_UPLOAD_DIR
 from app.services.git_service import GitService
@@ -455,6 +455,36 @@ async def get_changed_files(
         page_size=page_size,
         total_pages=total_pages
     )
+
+
+@router.post("/{task_id}/gitignore")
+async def add_to_gitignore(
+    task_id: str,
+    gitignore_request: GitignoreRequest,
+    db: DBSession = Depends(get_db),
+    current_user: Task = Depends(require_auth)
+):
+    """Add a file/directory path to the task worktree's .gitignore (idempotent)."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    success, message = FileService.add_to_gitignore(
+        task.worktree_path,
+        gitignore_request.path,
+        is_dir=gitignore_request.is_dir or False
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+
+    return {"success": True, "path": gitignore_request.path, "message": message}
 
 
 @router.get("/{task_id}/diff/{file_path:path}")

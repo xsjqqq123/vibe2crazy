@@ -354,9 +354,13 @@ async def accept_changes(
         )
 
     # Commit all changes in the worktree
+    # include_gitignore=False excludes .gitignore from this commit
+    include_gitignore = accept_request.include_gitignore is not False
+    logger.info(f"Accept request for task {task_id}: include_gitignore={include_gitignore} (raw={accept_request.include_gitignore!r})")
     commit_success, commit_message = GitService.auto_commit_worktree(
         worktree_path=task.worktree_path,
-        message=accept_request.message or f"Accept changes for {task.name}"
+        message=accept_request.message or f"Accept changes for {task.name}",
+        include_gitignore=include_gitignore
     )
 
     if not commit_success:
