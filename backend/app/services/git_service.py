@@ -1806,3 +1806,69 @@ class GitService:
             logger.error(f"Exception popping stash: {e}")
             return False, str(e)
 
+    @staticmethod
+    def apply_stash(worktree_path: str, stash_ref: str) -> tuple[bool, str]:
+        """Apply a stash to the worktree WITHOUT dropping it (git stash apply).
+
+        On conflict, the stash is kept and the conflict message is returned.
+
+        Args:
+            worktree_path: Path to the git worktree
+            stash_ref: Stash ref, e.g. "stash@{0}"
+
+        Returns:
+            Tuple of (success, message)
+        """
+        logger.info(f"Applying stash {stash_ref} in worktree: {worktree_path}")
+        try:
+            result = subprocess.run(
+                ["git", "-c", "core.quotePath=false", "stash", "apply", stash_ref],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+
+            if result.returncode == 0:
+                output = result.stdout.strip() or result.stderr.strip() or f"Applied stash {stash_ref}"
+                logger.info(f"Successfully applied stash {stash_ref}")
+                return True, output
+            else:
+                error_msg = result.stderr or result.stdout or f"Failed to apply stash {stash_ref}"
+                logger.error(f"Failed to apply stash {stash_ref}: {error_msg}")
+                return False, error_msg
+        except Exception as e:
+            logger.error(f"Exception applying stash: {e}")
+            return False, str(e)
+
+    @staticmethod
+    def drop_stash(worktree_path: str, stash_ref: str) -> tuple[bool, str]:
+        """Drop (delete) a stash entry without applying it (git stash drop).
+
+        Args:
+            worktree_path: Path to the git worktree
+            stash_ref: Stash ref, e.g. "stash@{0}"
+
+        Returns:
+            Tuple of (success, message)
+        """
+        logger.info(f"Dropping stash {stash_ref} in worktree: {worktree_path}")
+        try:
+            result = subprocess.run(
+                ["git", "-c", "core.quotePath=false", "stash", "drop", stash_ref],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True, encoding="utf-8"
+            )
+
+            if result.returncode == 0:
+                output = result.stdout.strip() or result.stderr.strip() or f"Dropped stash {stash_ref}"
+                logger.info(f"Successfully dropped stash {stash_ref}")
+                return True, output
+            else:
+                error_msg = result.stderr or result.stdout or f"Failed to drop stash {stash_ref}"
+                logger.error(f"Failed to drop stash {stash_ref}: {error_msg}")
+                return False, error_msg
+        except Exception as e:
+            logger.error(f"Exception dropping stash: {e}")
+            return False, str(e)
+

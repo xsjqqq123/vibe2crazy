@@ -147,6 +147,26 @@ export async function popStash(taskId: string, stashRef: string): Promise<ResetR
   })
 }
 
+export async function applyStash(taskId: string, stashRef: string): Promise<ResetResponse> {
+  return request<ResetResponse>(`/tasks/${taskId}/stash/apply`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ stash_ref: stashRef })
+  })
+}
+
+export async function dropStash(taskId: string, stashRef: string): Promise<ResetResponse> {
+  return request<ResetResponse>(`/tasks/${taskId}/stash/drop`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ stash_ref: stashRef })
+  })
+}
+
 export const gitApi = {
   getWorktreeCommits,
   getCommitDiff,
@@ -155,5 +175,7 @@ export const gitApi = {
   getBranches,
   stash,
   listStashes,
-  popStash
+  popStash,
+  applyStash,
+  dropStash
 }

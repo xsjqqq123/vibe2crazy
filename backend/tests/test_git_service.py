@@ -18,9 +18,10 @@ def test_get_changed_files_with_status_returns_empty_list_on_git_error():
 
 def test_get_changed_files_with_status_parses_porcelain_output():
     """Test parsing of git status --porcelain output"""
-    porcelain_output = """M src/App.vue
-A src/new.ts
-D src/old.ts
+    # Porcelain format is "XY filename" (X=staged, Y=unstaged, may be spaces)
+    porcelain_output = """ M src/App.vue
+A  src/new.ts
+D  src/old.ts
 R  src/orig.ts -> src/renamed.ts
 ?? src/untracked.ts"""
 
@@ -374,3 +375,41 @@ def test_pop_stash_restores_files_and_removes_entry(tmp_project, task_worktree):
     # Stash entry dropped
     stashes_after = GitService.list_stashes(str(task_worktree))
     assert all(s["ref"] != ref for s in stashes_after)
+
+
+def test_apply_stash_keeps_entry(tmp_project, task_worktree):
+    """apply_stash should restore files but KEEP the stash entry."""
+    (task_worktree / "a.txt").write_text("stashed content")
+    success, _ = GitService.stash_changes(str(task_worktree), message="to apply")
+    assert success
+
+    ref = GitService.list_stashes(str(task_worktree))[0]["ref"]
+
+    success, msg = GitService.apply_stash(str(task_worktree), ref)
+    assert success, f"Apply should succeed: {msg}"
+
+    # File restored
+    assert (task_worktree / "a.txt").read_text() == "stashed content"
+    # Stash entry is KEPT after apply
+    stashes_after = GitService.list_stashes(str(task_worktree))
+    assert any(s["ref"] == ref for s in stashes_after), "Stash entry should be kept after apply"
+
+
+def test_drop_stash_deletes_entry(tmp_project, task_worktree):
+    """drop_stash should delete the stash entry without applying it."""
+    (task_worktree / "a.txt").write_text("stashed content")
+    success, _ = GitService.stash_changes(str(task_worktree), message="to drop")
+    assert success
+
+    ref = GitService.list_stashes(str(task_worktree))[0]["ref"]
+
+    success, msg = GitService.drop_stash(str(task_worktree), ref)
+    assert success, f"Drop should succeed: {msg}"
+
+    stashes_after = GitService.list_stashes(str(task_worktree))
+    assert all(s["ref"] != ref for s in stashes_after), "Stash entry should be gone after drop"
+    # Worktree still clean (drop doesn't apply changes)
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=task_worktree, capture_output=True, text=True
+    ).stdout.strip()
+    assert status == "", "Worktree should stay clean after drop"

@@ -457,6 +457,52 @@ async def pop_stash_endpoint(
     return ResetResponse(success=success, message=message)
 
 
+@router.post("/{task_id}/stash/apply", response_model=ResetResponse)
+async def apply_stash_endpoint(
+    task_id: str,
+    pop_request: PopStashRequest,
+    db: Session = Depends(get_db),
+    current_user: Task = Depends(require_auth)
+):
+    """Apply a stash to the worktree without dropping it."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    success, message = GitService.apply_stash(
+        worktree_path=task.worktree_path,
+        stash_ref=pop_request.stash_ref
+    )
+
+    return ResetResponse(success=success, message=message)
+
+
+@router.post("/{task_id}/stash/drop", response_model=ResetResponse)
+async def drop_stash_endpoint(
+    task_id: str,
+    pop_request: PopStashRequest,
+    db: Session = Depends(get_db),
+    current_user: Task = Depends(require_auth)
+):
+    """Drop (delete) a stash entry from the task worktree."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+
+    success, message = GitService.drop_stash(
+        worktree_path=task.worktree_path,
+        stash_ref=pop_request.stash_ref
+    )
+
+    return ResetResponse(success=success, message=message)
+
+
 @branch_router.get("/branch", response_model=BranchResponse)
 async def get_branch(
     path: str = Query(..., description="Path to the git repository"),

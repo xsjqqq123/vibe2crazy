@@ -1807,11 +1807,11 @@ const createStash = async () => {
   }
 }
 
-const popStashEntry = async (item: StashItem) => {
+const applyStashEntry = async (item: StashItem) => {
   if (!taskId.value || stashing.value) return
   const confirmed = await showConfirm({
     title: 'Restore Stash',
-    message: `Apply and remove ${item.ref}${item.message ? ` — ${item.message}` : ''}?`,
+    message: `Apply ${item.ref}${item.message ? ` — ${item.message}` : ''}? (the stash entry will be kept)`,
     confirmText: 'Restore',
     danger: false
   })
@@ -1821,13 +1821,13 @@ const popStashEntry = async (item: StashItem) => {
   stashError.value = ''
   stashSuccess.value = ''
   try {
-    const res = await gitApi.popStash(taskId.value, item.ref)
+    const res = await gitApi.applyStash(taskId.value, item.ref)
     if (!res.success) {
       stashError.value = res.message || `Failed to restore ${item.ref}`
       return
     }
-    stashSuccess.value = res.message || `Restored ${item.ref}`
-    // Refresh list, changed files and commits after pop
+    stashSuccess.value = res.message || `Applied ${item.ref}`
+    // Refresh list (entry is kept after apply), changed files and commits
     await loadStashList()
     await loadChangedFiles()
     await loadCommits(true)
@@ -1835,8 +1835,40 @@ const popStashEntry = async (item: StashItem) => {
       stashSuccess.value = ''
     }, 3000)
   } catch (err: any) {
-    console.error('Failed to pop stash:', err)
+    console.error('Failed to apply stash:', err)
     stashError.value = err.message || `Failed to restore ${item.ref}`
+  } finally {
+    stashing.value = false
+  }
+}
+
+const dropStashEntry = async (item: StashItem) => {
+  if (!taskId.value || stashing.value) return
+  const confirmed = await showConfirm({
+    title: 'Delete Stash',
+    message: `Delete ${item.ref}${item.message ? ` — ${item.message}` : ''}? This cannot be undone.`,
+    confirmText: 'Delete',
+    danger: true
+  })
+  if (!confirmed) return
+
+  stashing.value = true
+  stashError.value = ''
+  stashSuccess.value = ''
+  try {
+    const res = await gitApi.dropStash(taskId.value, item.ref)
+    if (!res.success) {
+      stashError.value = res.message || `Failed to delete ${item.ref}`
+      return
+    }
+    stashSuccess.value = res.message || `Deleted ${item.ref}`
+    await loadStashList()
+    setTimeout(() => {
+      stashSuccess.value = ''
+    }, 3000)
+  } catch (err: any) {
+    console.error('Failed to drop stash:', err)
+    stashError.value = err.message || `Failed to delete ${item.ref}`
   } finally {
     stashing.value = false
   }
@@ -3873,12 +3905,22 @@ onUnmounted(() => {
               <div class="text-xs text-sub truncate">{{ item.date }}</div>
             </div>
             <button
-              @click="popStashEntry(item)"
+              @click="applyStashEntry(item)"
               :disabled="stashing"
               class="btn btn-secondary text-xs px-2 py-1 flex-shrink-0"
-              title="Restore stash"
+              title="Restore stash (keep entry)"
             >
               Restore
+            </button>
+            <button
+              @click="dropStashEntry(item)"
+              :disabled="stashing"
+              class="p-1 rounded hover:bg-tertiary text-sub hover:text-red-600 flex-shrink-0"
+              title="Delete stash"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
             </button>
           </div>
         </div>
