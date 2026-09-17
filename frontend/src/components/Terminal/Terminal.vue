@@ -347,7 +347,6 @@ const initTerminal = () => {
     // Connect with stable terminal size
     connect((data: string) => {
       xterm.value?.write(data)
-      checkApiError()
     }, { cols, rows })
   }
 
@@ -368,8 +367,6 @@ const initTerminal = () => {
       // Clear terminal and send reset command to clean up any artifacts
       xterm.value?.clear()
       send('\x1bc') // Reset terminal (RIS - Reset to Initial State)
-      // Reset API error watcher state on reconnect
-      if (apiErrorTimer) { clearTimeout(apiErrorTimer); apiErrorTimer = null }
     }
   })
 
@@ -413,40 +410,6 @@ const handleResize = () => {
     }
   })
 }
-
-  // API Error auto-continue watcher
-  let apiErrorTimer: ReturnType<typeof setTimeout> | null = null
-
-  const checkApiError = () => {
-    if (!xterm.value) return
-    const buffer = xterm.value.buffer.active
-    const visibleLines: string[] = []
-    for (let i = 0; i < buffer.length; i++) {
-      visibleLines.push(buffer.getLine(i)?.translateToString(true) ?? '')
-    }
-    const text = visibleLines.join(' ')
-    const hasApiError = text.includes('API Error:')
-
-    if (hasApiError && !apiErrorTimer) {
-      apiErrorTimer = setTimeout(() => {
-        apiErrorTimer = null
-        // Re-check after 20s
-        if (!xterm.value) return
-        const buf = xterm.value.buffer.active
-        const lines: string[] = []
-        for (let i = 0; i < buf.length; i++) {
-          lines.push(buf.getLine(i)?.translateToString(true) ?? '')
-        }
-        if (lines.join(' ').includes('API Error:')) {
-          send('continue')
-          setTimeout(() => send('\r'), 500)
-        }
-      }, 20000)
-    } else if (!hasApiError && apiErrorTimer) {
-      clearTimeout(apiErrorTimer)
-      apiErrorTimer = null
-    }
-  }
 
   // Mobile keyboard handling: visualViewport shrinks when keyboard opens,
   // but layout viewport (innerHeight) stays the same. We need to adjust
@@ -514,7 +477,6 @@ const handleResize = () => {
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
   if (stableTimer) clearTimeout(stableTimer)
-  if (apiErrorTimer) clearTimeout(apiErrorTimer)
 
   // Clean up wheel event listener
   if (wheelHandler && terminalRef.value) {

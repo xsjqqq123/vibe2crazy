@@ -32,39 +32,6 @@ const connectionType = ref<AddressType>('public')
 let isIntentionalClose = false
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
 
-// API Error auto-continue watcher
-let apiErrorTimer: ReturnType<typeof setTimeout> | null = null
-
-const checkApiError = () => {
-  if (!xterm.value) return
-  const buffer = xterm.value.buffer.active
-  const visibleLines: string[] = []
-  for (let i = 0; i < buffer.length; i++) {
-    visibleLines.push(buffer.getLine(i)?.translateToString(true) ?? '')
-  }
-  const text = visibleLines.join(' ')
-  const hasApiError = text.includes('API Error:')
-
-  if (hasApiError && !apiErrorTimer) {
-    apiErrorTimer = setTimeout(() => {
-      apiErrorTimer = null
-      if (!xterm.value) return
-      const buf = xterm.value.buffer.active
-      const lines: string[] = []
-      for (let i = 0; i < buf.length; i++) {
-        lines.push(buf.getLine(i)?.translateToString(true) ?? '')
-      }
-      if (lines.join(' ').includes('API Error:')) {
-        send('continue')
-        setTimeout(() => send('\r'), 500)
-      }
-    }, 20000)
-  } else if (!hasApiError && apiErrorTimer) {
-    clearTimeout(apiErrorTimer)
-    apiErrorTimer = null
-  }
-}
-
 // Drag state
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
@@ -237,8 +204,6 @@ const connect = () => {
         // Clear terminal and send reset command
         xterm.value.clear()
       }
-      // Reset API error watcher on reconnect
-      if (apiErrorTimer) { clearTimeout(apiErrorTimer); apiErrorTimer = null }
     }
 
     ws.value.onmessage = (event) => {
@@ -251,13 +216,11 @@ const connect = () => {
         }
         if (msg.type === 'output') {
           xterm.value?.write(msg.data)
-          checkApiError()
         } else if (msg.type === 'error') {
           xterm.value?.writeln(`\x1b[31mError: ${msg.message}\x1b[0m`)
         }
       } catch {
         xterm.value?.write(event.data)
-        checkApiError()
       }
     }
 
@@ -294,11 +257,6 @@ const disconnect = () => {
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout)
     reconnectTimeout = null
-  }
-
-  if (apiErrorTimer) {
-    clearTimeout(apiErrorTimer)
-    apiErrorTimer = null
   }
 
   if (ws.value) {
@@ -774,7 +732,6 @@ onMounted(() => {
 onUnmounted(() => {
   if (resizeTimeout) clearTimeout(resizeTimeout)
   if (initialResizeTimer) clearTimeout(initialResizeTimer)
-  if (apiErrorTimer) clearTimeout(apiErrorTimer)
 
   // Clean up wheel event listener
   if (wheelHandler && terminalRef.value) {
