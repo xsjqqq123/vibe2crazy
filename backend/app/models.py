@@ -1,4 +1,7 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum, Text, Integer, Boolean
+from sqlalchemy import (
+    Column, String, DateTime, ForeignKey, Enum as SQLEnum, Text, Integer, Boolean,
+    UniqueConstraint, Index,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -126,3 +129,45 @@ class SystemSettings(Base):
     password_hash = Column(String(128), nullable=True)  # Hashed password
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class NotebookGroup(Base):
+    """Notebook group. Maps to a direct subdirectory of the notebook root.
+
+    The default group ("Unsorted") always exists and cannot be renamed or deleted.
+    """
+    __tablename__ = "notebook_groups"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    is_default = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationship
+    notes = relationship("Notebook", back_populates="group", cascade="all, delete-orphan")
+
+
+class Notebook(Base):
+    """Notebook metadata. The content lives in a .md file on disk; this row is the index."""
+    __tablename__ = "notebooks"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=False)  # Display name, equals the filename stem
+    filename = Column(String(255), nullable=False)  # On-disk basename including .md
+    group_id = Column(String, ForeignKey("notebook_groups.id"), nullable=False, index=True)
+    position = Column(Integer, nullable=False, default=0)
+    pinned = Column(Boolean, nullable=False, default=False, server_default="0")
+    size = Column(Integer, nullable=False, default=0)  # Cached stat, avoids N stats per list
+    mtime = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationship
+    group = relationship("NotebookGroup", back_populates="notes")
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "filename", name="uq_notebook_group_filename"),
+        Index("ix_notebook_group_pinned_position", "group_id", "pinned", "position"),
+    )

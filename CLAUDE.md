@@ -154,11 +154,53 @@ Background service monitors task activity:
 - **Code Status**: `pending_review`, `ready_to_merge`, or `no_changes`
 - **Detection**: Checks tmux for running processes, git diff for code changes
 
+### Markdown Notebook
+
+A global markdown note-taking page at `/notebook`, reached from the notebook icon in the
+Projects page header. Notes are **real `.md` files on disk** under `NOTEBOOKS_DIR`
+(default `backend/notebooks/`); a group is a direct subdirectory of that root. SQLite
+(`NotebookGroup`, `Notebook`) stores only metadata — pin flag, ordering, cached stat.
+
+- **Endpoints**: `/api/notebooks` (tree), `/api/notebooks/{id}` (note CRUD),
+  `/api/notebooks/{id}/content`, `/api/notebooks/{id}/pin`, `/api/notebooks/{id}/move`,
+  `/api/notebooks/groups/*`, `/api/notebooks/search`
+- **Service**: `notebook_service.py` owns name sanitising, path validation, the disk↔DB
+  reconciler, position swapping and search
+- **Reconciler**: `GET /api/notebooks` re-scans disk on every call, so notes added or
+  deleted from a terminal (or git) show up. **The filesystem is the source of truth.**
+- **Ordering**: `pinned DESC, position ASC`, sparse `position` (+1024). `move` swaps with
+  the adjacent note in the same pin bucket and returns the group's full list
+- **Search**: scans disk directly rather than querying SQL; filename hits rank above
+  content hits. Only files actually read count against the 500-file budget, so a name
+  match is never starved by content reads. Symlinks are skipped.
+- **Saving**: 1.5s debounced autosave plus Ctrl/Cmd+S; `PUT .../content` carries a
+  `base_hash` (sha256) optimistic-lock token returned by `GET /api/notebooks/{id}` and
+  returns 409 `stale_content:` when the file changed underneath the editor. A hash
+  rather than an mtime because coarse filesystem timestamps cannot distinguish two
+  edits within the same second.
+- **UI**: `NotebookView.vue` + `NotebookSidebar.vue`, `NotebookGroupNode.vue`,
+  `NotebookEditor.vue`. Three modes: edit / split / preview. The note list can be hidden
+  from the header; hiding is done in CSS so the editor's Monaco instance survives the
+  toggle (`NotebookEditor` exposes `relayout()` for the resulting width change). Copy is
+  in English, matching the rest of the app — including `DEFAULT_GROUP_NAME = "Unsorted"`,
+  which is also the on-disk directory name; `ensure_default_group()` migrates an older
+  name across on startup.
+- **Rendering**: `MarkdownRenderer.vue` (pure markdown-it + mermaid placeholders) and
+  `MarkdownPane.vue` (scroll container + outline + mermaid hydration) are shared with
+  `MarkdownPreviewModal.vue`. Their CSS uses the theme variables, so all four themes render
+- **Divider**: splitpanes bundles a `default-theme` that paints the splitter white with
+  `border-left: 1px solid #eee`. `NotebookView.vue` overrides the whole appearance scoped
+  to `.notebook-splitpanes` rather than relying on `CodeReviewView`'s global rules, which
+  only exist once that lazily-loaded view has been visited
+- **Caveats**: no nested subdirectories (only direct children of the root are groups);
+  external renames appear as delete+create (id and position reset)
+
 ## Configuration
 
 Backend environment variables (`backend/.env`):
 - `VIBE2CRAZY_PASSWORD` - Login password (default: "password")
 - `PROJECTS_DIR` - Directory for Git worktrees (default: "./projects")
+- `NOTEBOOKS_DIR` - Root directory for markdown notes (default: "./notebooks")
 - `DATABASE_URL` - SQLite database path (default: "sqlite:///./data/vibe2crazy.db")
 - `GIT_DEFAULT_BRANCH` - Default branch name (default: "main")
 - `SESSION_EXPIRE_HOURS` - Session token expiration (default: 24)

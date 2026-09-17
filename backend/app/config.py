@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     # Storage
     projects_dir: str = "./projects"
+    notebooks_dir: str = "./notebooks"
     database_url: str = "sqlite:///./data/vibe2crazy.db"
 
     # Git
@@ -70,6 +71,13 @@ class Settings(BaseSettings):
     def projects_path(self) -> Path:
         # Resolve to absolute path to avoid issues with file operations
         path = Path(self.projects_dir).resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def notebooks_path(self) -> Path:
+        # Resolve to absolute path to avoid issues with file operations
+        path = Path(self.notebooks_dir).resolve()
         path.mkdir(parents=True, exist_ok=True)
         return path
 

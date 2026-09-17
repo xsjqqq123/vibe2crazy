@@ -33,6 +33,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/notebook',
+      name: 'notebook',
+      component: () => import('@/views/NotebookView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/matrix',
       name: 'matrix',
       component: () => import('@/views/MatrixView.vue'),

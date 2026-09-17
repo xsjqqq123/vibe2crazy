@@ -38,7 +38,9 @@ def get_db():
 
 def init_db():
     """Initialize database tables"""
-    from app.models import Project, Task, Session, CommandPreset
+    from app.models import (
+        Project, Task, Session, CommandPreset, NotebookGroup, Notebook,
+    )
     Base.metadata.create_all(bind=engine)
 
     # Seed default command preset if it doesn't exist

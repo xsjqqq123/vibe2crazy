@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import init_db, SessionLocal
 import asyncio
 from app.services.task_monitor_service import TaskMonitorService
-from app.routers import auth, projects, tasks, files, git, terminals, queues, command_presets, filesystem, symbols, global_terminal, tunnel, config, matrix, search
+from app.routers import auth, projects, tasks, files, git, terminals, queues, command_presets, filesystem, symbols, global_terminal, tunnel, config, matrix, search, notebooks
 from app.websocket.terminal import get_websocket_terminal
 from app.websocket.manager import manager
 from app.auth import verify_token
@@ -138,6 +138,7 @@ app.include_router(global_terminal.router)
 app.include_router(tunnel.router)
 app.include_router(config.router)
 app.include_router(search.router)
+app.include_router(notebooks.router)
 
 # Serve frontend static files if bundled/available
 # Mount assets directory for JS, CSS, images, etc.

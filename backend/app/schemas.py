@@ -420,3 +420,115 @@ class ChangePasswordResponse(BaseModel):
     message: str
 
 
+
+# Notebook schemas
+class NotebookGroupCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+class NotebookGroupUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+
+
+class NotebookGroupResponse(BaseModel):
+    id: str
+    name: str
+    position: int
+    is_default: bool
+    note_count: int = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class NotebookCreate(BaseModel):
+    group_id: str
+    title: str = Field(..., min_length=1, max_length=255)
+    content: str = ""
+
+
+class NotebookUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    group_id: Optional[str] = None
+
+
+class NotebookResponse(BaseModel):
+    id: str
+    title: str
+    filename: str
+    group_id: str
+    position: int
+    pinned: bool
+    size: int
+    mtime: Optional[float] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class NotebookDetailResponse(NotebookResponse):
+    content: str
+    group_name: str
+    # Optimistic-lock token; echo back as base_hash on save.
+    hash: Optional[str] = None
+
+
+class NotebookTreeGroup(BaseModel):
+    id: str
+    name: str
+    position: int
+    is_default: bool
+    note_count: int
+    notes: List[NotebookResponse]
+
+
+class NotebookTreeResponse(BaseModel):
+    root: str
+    groups: List[NotebookTreeGroup]
+
+
+class NotebookContentUpdate(BaseModel):
+    content: str
+    # Omit to force a write regardless of what is on disk.
+    base_hash: Optional[str] = None
+
+
+class NotebookContentResponse(BaseModel):
+    id: str
+    size: int
+    mtime: float
+    hash: str
+
+
+class PinRequest(BaseModel):
+    pinned: bool
+
+
+class MoveRequest(BaseModel):
+    direction: str = Field(..., pattern="^(up|down)$")
+
+
+class NotebookSearchResult(BaseModel):
+    id: str
+    title: str
+    filename: str
+    group_name: str
+    match_type: str  # "filename" | "content"
+    snippet: Optional[str] = None
+    line: Optional[int] = None
+
+
+class NotebookSearchResponse(BaseModel):
+    query: str = ""
+    results: List[NotebookSearchResult] = []
+    total: int = 0
+    truncated: bool = False
+
+
+class NotebookReconcileResponse(BaseModel):
+    created: int
+    updated: int
+    deleted: int

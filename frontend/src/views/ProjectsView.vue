@@ -11,6 +11,7 @@ import DirectoryAutocomplete from '@/components/DirectoryAutocomplete.vue'
 import BranchAutocomplete from '@/components/BranchAutocomplete.vue'
 import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
 import MatrixIcon from '@/components/MatrixIcon.vue'
+import NotebookIcon from '@/components/NotebookIcon.vue'
 import UpdateToast from '@/components/UpdateToast.vue'
 import UpdateDetailModal from '@/components/UpdateDetailModal.vue'
 import TunnelPanel from '@/components/TunnelPanel.vue'
@@ -320,6 +321,7 @@ onMounted(async () => {
           </button>
           <GlobalTerminalIcon />
           <MatrixIcon />
+          <NotebookIcon />
           <button @click="logout" class="p-0 rounded-lg hover:bg-sub" title="Logout">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sub" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
