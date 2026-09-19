@@ -3,6 +3,9 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { loader } from '@guolao/vue-monaco-editor'
 import { useMainStore, type ThemeName } from '@/store'
 import { detectLanguage } from '@/utils/languageDetection'
+import { modelUriFor } from '@/utils/jsonSchemas'
+
+let modelScopeCounter = 0
 
 interface Props {
   modelValue?: string
@@ -41,6 +44,11 @@ const store = useMainStore()
 const containerRef = ref<HTMLElement | null>(null)
 let editor: any = null
 let model: any = null
+// Monaco identifies models by URI, so each editor instance needs its own: the
+// same file is routinely open in the main pane and in both preview panes, and
+// createModel throws on a URI that is already taken. The file path stays at
+// the tail because JSON schema `fileMatch` globs are matched against it.
+let modelScope = ''
 let focusInterceptor: ((e: Event) => void) | null = null
 let pasteInterceptor: ((e: MouseEvent) => void) | null = null
 
@@ -142,7 +150,17 @@ onMounted(async () => {
   // Create Monaco editor with explicit model for better tokenization control
   // Use the LATEST modelValue — it may have been updated during the async init above
   try {
-    model = monaco.editor.createModel(props.modelValue, currentLanguage.value)
+    if (!modelScope) {
+      modelScope = `m${++modelScopeCounter}`
+    }
+    const modelPath = props.path || props.filePath
+    model = modelPath
+      ? monaco.editor.createModel(
+          props.modelValue,
+          currentLanguage.value,
+          monaco.Uri.parse(modelUriFor(modelScope, modelPath))
+        )
+      : monaco.editor.createModel(props.modelValue, currentLanguage.value)
     console.log('[MonacoEditor] model created, language:', currentLanguage.value)
 
     editor = monaco.editor.create(containerRef.value, {

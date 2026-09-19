@@ -25,6 +25,7 @@ import TaskSettingsModal from '@/components/TaskSettingsModal.vue'
 import RefererSearch from '@/components/RefererSearch.vue'
 import { useSymbolOutline, type SymbolInfo } from '@/composables/useSymbolOutline'
 import { isTasksJsonPath } from '@/utils/vscodeTasks'
+import { syncSchemasForFile } from '@/utils/jsonSchemas'
 import { detectLanguage, supportsSymbolExtraction } from '@/utils/languageDetection'
 import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
 import { closePersistentConnection } from '@/composables/useWebSocket'
@@ -225,6 +226,14 @@ watch(fileContent, (content) => {
   tasksModalPath.value = currentFile.value ?? ''
   tasksModalContent.value = content
   showTasksModal.value = true
+})
+
+// Attach a workspace JSON schema (if the file declares one) so the editor can
+// show its descriptions on hover. Runs per open; cheap and best-effort.
+watch([currentFile, fileContent], ([path, content]) => {
+  if (!path || !content) return
+  if (!path.toLowerCase().endsWith('.json')) return
+  void syncSchemasForFile(taskId.value, path, content)
 })
 
 // Watch currentFile to save/restore position using mainEditorState and expand file tree

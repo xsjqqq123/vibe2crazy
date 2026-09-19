@@ -165,6 +165,32 @@ JSON.
   surfaced for `${input:id}`. Tasks with only `dependsOn` get a `vtr` command but no raw
   one. Opening the file in a *preview pane* (middle click) does not trigger the dialog
 
+#### JSON Schema Hover
+
+Opening a JSON file that has a schema attached makes the editor show the schema's
+`description` on hover (validation and property-name completion come with it).
+
+- **Service**: `utils/jsonSchemas.ts`. Schemas come **from the worktree, never the
+  network**: the document's own `$schema` when it points at a repo file, and
+  `.vscode/settings.json` -> `json.schemas`. `enableSchemaRequest` stays off
+- **Model URIs**: `MonacoEditor.vue` gives models a URI of
+  `inmemory://code-review/<scope>/<filePath>`. Two things depend on the path being
+  there — `fileMatch` globs are matched against the URI's path, and Monaco resolves a
+  document's `$schema` against its URI. `<scope>` is per editor instance, because the
+  same file can be open in several panes and `createModel` throws on a taken URI
+- **Why the schema is registered by URI, not only by `fileMatch`**: a declared
+  `$schema` *takes precedence over* `fileMatch`, so a document that declares one is
+  looked up by the URI its `$schema` resolves to. Registering under `fileMatch` alone
+  leaves such a document with nothing (verified: hover is empty, and the worker reports
+  "No schema request service available")
+- **`setDiagnosticsOptions` must be called explicitly.** Monaco's defaults look right
+  but are never pushed to the JSON worker until this runs, which leaves `allowComments`
+  unset there — so every comment line in a valid JSONC file (`.vscode/tasks.json` and
+  friends) was flagged "Comments are not permitted in JSON." VS Code treats all `.json`
+  as JSONC, so comments and trailing commas are allowed
+- **Worker**: the JSON worker already runs — the AMD loader resolves
+  `vs/language/json/jsonWorker.js` from `/vs`, so none of this needed build changes
+
 #### Task Status Monitoring
 fjkljfdasfdsafsf
 Background service monitors task activity:
