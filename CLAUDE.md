@@ -145,6 +145,26 @@ Command queue enables sending commands to terminal from outside the WebSocket:
 - **Model**: `CommandQueue` with status (pending/executing/completed)
 - **Use Case**: External tools can queue commands for tasks
 
+#### VS Code Tasks Helper
+
+Opening `.vscode/tasks.json` in the code editor pops a dialog listing every task in
+it, with copy buttons — so a task can be run in the terminal without hand-reading the
+JSON.
+
+- **Trigger**: `CodeReviewView.vue` raises a request in `watch(currentFile)` and consumes
+  it in `watch(fileContent)`. Splitting it this way means editing the file afterwards does
+  not re-open the dialog; only switching to the file does
+- **Parser**: `utils/vscodeTasks.ts`. Emits two commands per task — `vtr <label>` for
+  [vscode-task-runner](https://github.com/NathanVaughn/vscode-task-runner) (which resolves
+  `${...}` variables and `dependsOn` the way VS Code does), and the underlying shell
+  command for people without vtr
+- **JSONC**: tasks.json parsed as JSONC — VS Code writes `//` comments into these files,
+  so a plain `JSON.parse` rejects a valid file. Comments and trailing commas are stripped
+  by a string-aware scanner, so `"http://…"` in an argument survives
+- **Notes**: the raw command is flagged when it contains `${...}`, and `VTR_INPUT_<id>` is
+  surfaced for `${input:id}`. Tasks with only `dependsOn` get a `vtr` command but no raw
+  one. Opening the file in a *preview pane* (middle click) does not trigger the dialog
+
 #### Task Status Monitoring
 fjkljfdasfdsafsf
 Background service monitors task activity:

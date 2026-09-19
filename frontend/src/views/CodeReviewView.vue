@@ -16,6 +16,7 @@ import { useFileTree, provideFileTree } from '@/composables/useFileTree'
 import FileTreeItem from '@/components/FileTreeItem.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import MarkdownPreviewModal from '@/components/MarkdownPreviewModal.vue'
+import VscodeTasksModal from '@/components/VscodeTasksModal.vue'
 import FileQuickJumpModal from '@/components/FileQuickJumpModal.vue'
 import type { MenuItem } from '@/components/ContextMenu.vue'
 import SymbolOutline from '@/components/Monaco/SymbolOutline.vue'
@@ -23,6 +24,7 @@ import ConflictEditor from '@/components/Monaco/ConflictEditor.vue'
 import TaskSettingsModal from '@/components/TaskSettingsModal.vue'
 import RefererSearch from '@/components/RefererSearch.vue'
 import { useSymbolOutline, type SymbolInfo } from '@/composables/useSymbolOutline'
+import { isTasksJsonPath } from '@/utils/vscodeTasks'
 import { detectLanguage, supportsSymbolExtraction } from '@/utils/languageDetection'
 import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
 import { closePersistentConnection } from '@/composables/useWebSocket'
@@ -201,6 +203,28 @@ watch(activeView, async (view) => {
   if (targetFile) {
     await expandParents(targetFile)
   }
+})
+
+// -- .vscode/tasks.json helper -------------------------------------------
+// Opening that file pops a list of its tasks. The request is raised when the
+// path changes and consumed once the content arrives, so editing the file
+// afterwards does not re-open the dialog.
+const showTasksModal = ref(false)
+const tasksModalPath = ref('')
+const tasksModalContent = ref('')
+let tasksModalRequested = false
+
+watch(currentFile, (newFile) => {
+  tasksModalRequested = isTasksJsonPath(newFile)
+  if (!tasksModalRequested) showTasksModal.value = false
+})
+
+watch(fileContent, (content) => {
+  if (!tasksModalRequested || !content) return
+  tasksModalRequested = false
+  tasksModalPath.value = currentFile.value ?? ''
+  tasksModalContent.value = content
+  showTasksModal.value = true
 })
 
 // Watch currentFile to save/restore position using mainEditorState and expand file tree
@@ -3800,6 +3824,14 @@ onUnmounted(() => {
       :content="markdownPreviewContent"
       :show="showMarkdownPreview"
       @close="showMarkdownPreview = false"
+    />
+
+    <!-- VS Code Tasks Modal -->
+    <VscodeTasksModal
+      :show="showTasksModal"
+      :file-path="tasksModalPath"
+      :content="tasksModalContent"
+      @close="showTasksModal = false"
     />
 
     <!-- File Quick Jump Modal -->
