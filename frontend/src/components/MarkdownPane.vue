@@ -29,6 +29,39 @@ const activeHeading = ref<string>('')
 
 const headings = computed(() => extractHeadings(props.content))
 
+// -- resizable outline ------------------------------------------------------
+
+const paneRef = ref<HTMLElement>()
+const outlineWidth = ref(220)
+const MIN_OUTLINE_WIDTH = 140
+const MAX_OUTLINE_WIDTH = 520
+let paneLeft = 0
+
+const onOutlineResize = (e: MouseEvent) => {
+  outlineWidth.value = Math.min(
+    MAX_OUTLINE_WIDTH,
+    Math.max(MIN_OUTLINE_WIDTH, e.clientX - paneLeft)
+  )
+}
+
+const stopOutlineResize = () => {
+  document.removeEventListener('mousemove', onOutlineResize)
+  document.removeEventListener('mouseup', stopOutlineResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+const startOutlineResize = (e: MouseEvent) => {
+  e.preventDefault()
+  paneLeft = paneRef.value?.getBoundingClientRect().left ?? 0
+  document.addEventListener('mousemove', onOutlineResize)
+  document.addEventListener('mouseup', stopOutlineResize)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
+onUnmounted(stopOutlineResize)
+
 // -- mermaid ---------------------------------------------------------------
 
 // Live preview re-renders on every keystroke, so mermaid runs behind a short
@@ -164,8 +197,8 @@ defineExpose({ scrollToHeading })
 </script>
 
 <template>
-  <div class="md-pane" :class="{ 'has-outline': showOutline && headings.length > 0 }">
-    <div v-if="showOutline && headings.length > 0" class="md-outline">
+  <div ref="paneRef" class="md-pane" :class="{ 'has-outline': showOutline && headings.length > 0 }">
+    <div v-if="showOutline && headings.length > 0" class="md-outline" :style="{ width: outlineWidth + 'px' }">
       <div class="md-outline-title">Outline</div>
       <div class="md-outline-items">
         <div
@@ -177,6 +210,7 @@ defineExpose({ scrollToHeading })
           @click="scrollToHeading(h.anchorId)"
         >{{ h.text }}</div>
       </div>
+      <div class="md-outline-resizer" title="Drag to resize" @mousedown="startOutlineResize"></div>
     </div>
 
     <div ref="contentRef" class="md-scroll-content" @scroll="handleOutlineScroll">
@@ -196,12 +230,31 @@ defineExpose({ scrollToHeading })
 }
 
 .md-outline {
+  position: relative;
   width: 220px;
-  min-width: 220px;
-  border-right: 1px solid var(--border-color);
+  flex: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-right: 1px solid var(--border-color);
+}
+
+.md-outline-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background-color: transparent;
+  z-index: 1;
+  transition: background-color 0.12s ease;
+}
+
+@media (hover: hover) {
+  .md-outline-resizer:hover {
+    background-color: color-mix(in srgb, var(--accent-color) 40%, transparent);
+  }
 }
 
 .md-outline-title {
@@ -264,11 +317,15 @@ defineExpose({ scrollToHeading })
   }
 
   .md-outline {
-    width: 100%;
+    width: 100% !important;
     min-width: unset;
     max-height: 160px;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
+  }
+
+  .md-outline-resizer {
+    display: none;
   }
 
   .md-scroll-content {

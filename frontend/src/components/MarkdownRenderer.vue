@@ -9,6 +9,8 @@
  */
 import { computed } from 'vue'
 import MarkdownIt from 'markdown-it'
+import texmath from 'markdown-it-texmath'
+import katex from 'katex'
 import hljs from 'highlight.js'
 import { installHeadingAnchors } from '@/utils/markdownHeadings'
 
@@ -36,6 +38,7 @@ const md: MarkdownIt = new MarkdownIt({
 })
 
 installHeadingAnchors(md)
+md.use(texmath, { engine: katex, delimiters: ['dollars', 'brackets'] })
 
 const renderedMarkdown = computed(() => {
   if (!props.content) return '<p class="md-empty">No content</p>'
@@ -267,6 +270,17 @@ const renderedMarkdown = computed(() => {
   margin: 1em 0;
   text-align: center;
   overflow-x: auto;
+}
+
+/* KaTeX math */
+.md-content :deep(.katex-display) {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.md-content :deep(.katex) {
+  font-size: 1.05em;
 }
 
 .md-content :deep(.mermaid svg) {

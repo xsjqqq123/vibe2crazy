@@ -381,11 +381,18 @@ onUnmounted(() => {
     <!-- Header -->
     <header class="bg-main border-b border-main shrink-0">
       <div class="px-3 sm:px-4 lg:px-6 py-2 flex items-center justify-between">
-        <div>
-          <h1 class="text-lg font-semibold text-main">Notebook</h1>
-          <p class="text-xs text-sub truncate">
-            {{ store.root || 'Markdown notes' }}
-          </p>
+        <div class="flex items-center gap-2">
+          <button class="p-0 rounded-lg hover:bg-sub" title="Back to projects" @click="router.push('/projects')">
+            <svg class="h-5 w-5 text-sub" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div>
+            <h1 class="text-lg font-semibold text-main">Notebook</h1>
+            <p class="text-xs text-sub truncate">
+              {{ store.root || 'Markdown notes' }}
+            </p>
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <button
@@ -412,9 +419,6 @@ onUnmounted(() => {
             </svg>
           </button>
           <GlobalTerminalIcon />
-          <button class="btn btn-secondary text-sm" @click="router.push('/projects')">
-            Back to projects
-          </button>
         </div>
       </div>
     </header>

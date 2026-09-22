@@ -8,6 +8,7 @@ import { loader } from '@guolao/vue-monaco-editor'
 // wsNetworkManager auto-initializes when imported, listening to networkDetector
 import './utils/wsNetworkManager'
 import './assets/styles/main.css'
+import 'katex/dist/katex.min.css'
 import 'splitpanes/dist/splitpanes.css'
 import 'highlight.js/styles/atom-one-dark.css'
 
