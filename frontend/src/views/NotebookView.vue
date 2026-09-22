@@ -11,6 +11,7 @@ import { Splitpanes, Pane } from 'splitpanes'
 import NotebookSidebar from '@/components/NotebookSidebar.vue'
 import NotebookEditor from '@/components/NotebookEditor.vue'
 import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
+import GlobalTerminalIcon from '@/components/GlobalTerminalIcon.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useTheme } from '@/composables/useTheme'
 import { useNotebookStore } from '@/store/notebook'
@@ -410,6 +411,7 @@ onUnmounted(() => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </button>
+          <GlobalTerminalIcon />
           <button class="btn btn-secondary text-sm" @click="router.push('/projects')">
             Back to projects
           </button>
